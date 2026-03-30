@@ -93,7 +93,7 @@ async fn _run() -> Result<()> {
         Command::Import(cmd) => cmd.run().await,
 
         Command::ShowLicense => {
-            let license = fs::read_to_string(paths::LICENSE_PATH)?;
+            let license = fs::read_to_string(paths::jb_root_path(paths::LICENSE_PATH))?;
             eprintln!("\n{license}\n");
 
             Ok(())

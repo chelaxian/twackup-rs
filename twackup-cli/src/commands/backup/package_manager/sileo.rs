@@ -18,7 +18,7 @@
  */
 
 use super::{Hooks, NewStylePackageManager, PackageManagerDescription};
-use crate::{commands::backup::RepoGroup, Result};
+use crate::{commands::backup::RepoGroup, paths, Result};
 use std::path::PathBuf;
 
 pub(crate) struct Sileo {
@@ -47,7 +47,7 @@ impl PackageManagerDescription for Sileo {
     }
 
     fn repos_file_path(&self) -> PathBuf {
-        PathBuf::from(self.sources)
+        paths::jb_root_path(self.sources)
     }
 }
 

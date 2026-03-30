@@ -18,7 +18,7 @@
  */
 
 use super::{Hooks, OldStylePackageManager, PackageManagerDescription};
-use crate::{commands::backup::RepoGroup, Result};
+use crate::{commands::backup::RepoGroup, paths, Result};
 use plist::Value as PValue;
 use std::{io, path::PathBuf};
 use twackup::repository::Repository;
@@ -65,7 +65,8 @@ impl Cydia {
 
 impl Hooks for Cydia {
     fn post_import(&self, repo_group: &RepoGroup) -> Result<()> {
-        let mut prefs = PValue::from_file(self.prefs_path)?;
+        let prefs_path = paths::jb_root_path(self.prefs_path);
+        let mut prefs = PValue::from_file(&prefs_path)?;
 
         let prefs_dict = prefs
             .as_dictionary_mut()
@@ -82,7 +83,7 @@ impl Hooks for Cydia {
 
         prefs_dict.insert("CydiaSources".to_string(), PValue::Dictionary(sources));
 
-        Ok(prefs.to_file_binary(self.prefs_path)?)
+        Ok(prefs.to_file_binary(prefs_path)?)
     }
 }
 
@@ -94,6 +95,6 @@ impl PackageManagerDescription for Cydia {
     }
 
     fn repos_file_path(&self) -> PathBuf {
-        PathBuf::from(self.sources)
+        paths::jb_root_path(self.sources)
     }
 }

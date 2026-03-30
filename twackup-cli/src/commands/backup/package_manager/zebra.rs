@@ -18,7 +18,7 @@
  */
 
 use super::{Hooks, OldStylePackageManager, PackageManagerDescription};
-use crate::{commands::backup::RepoGroup, Result};
+use crate::{commands::backup::RepoGroup, paths, Result};
 use std::{fs, path::PathBuf};
 
 pub(crate) struct Zebra {
@@ -37,7 +37,8 @@ impl Zebra {
 
 impl Hooks for Zebra {
     fn post_import(&self, _repo_group: &RepoGroup) -> Result<()> {
-        let path = "/var/mobile/Library/Application Support/xyz.willy.Zebra/zebra.db";
+        let path =
+            paths::jb_root_path("/var/mobile/Library/Application Support/xyz.willy.Zebra/zebra.db");
         fs::remove_file(path)?;
 
         Ok(())
@@ -52,6 +53,6 @@ impl PackageManagerDescription for Zebra {
     }
 
     fn repos_file_path(&self) -> PathBuf {
-        PathBuf::from(self.sources)
+        paths::jb_root_path(self.sources)
     }
 }

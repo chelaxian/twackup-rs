@@ -1,4 +1,4 @@
-use std::ffi::OsString;
+use std::{ffi::OsString, path::PathBuf};
 
 pub(crate) const LICENSE_PATH: &str = "/usr/share/doc/ru.danpashin.twackup/LICENSE";
 
@@ -22,6 +22,29 @@ pub(crate) fn dpkg_admin_dir() -> &'static str {
 #[cfg(not(any(target_os = "macos", target_os = "ios")))]
 pub(crate) fn dpkg_admin_dir() -> OsString {
     "/var/lib/dpkg".into()
+}
+
+#[cfg(target_os = "ios")]
+pub(crate) fn jb_root_path(path: &str) -> PathBuf {
+    let rootful_path = PathBuf::from(path);
+    if std::fs::metadata(&rootful_path).is_ok() {
+        return rootful_path;
+    }
+
+    let relative_path = std::path::Path::new(path)
+        .strip_prefix("/")
+        .unwrap_or_else(|_| std::path::Path::new(path));
+    let rootless_path = std::path::Path::new("/var/jb").join(relative_path);
+    if std::fs::metadata(&rootless_path).is_ok() {
+        rootless_path
+    } else {
+        rootful_path
+    }
+}
+
+#[cfg(not(target_os = "ios"))]
+pub(crate) fn jb_root_path(path: &str) -> PathBuf {
+    PathBuf::from(path)
 }
 
 #[cfg(target_os = "ios")]
