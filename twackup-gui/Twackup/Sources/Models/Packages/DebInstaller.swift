@@ -11,7 +11,9 @@ import Foundation
 enum DebInstaller {
     enum Error: LocalizedError {
         case noPackages
+        case missingArchive(String)
         case failed(Int32)
+        case failedWithOutput(Int32, String)
         case spawnFailed(Int32, String)
         case waitFailed(Int32)
 
@@ -19,8 +21,12 @@ enum DebInstaller {
             switch self {
             case .noPackages:
                 "No packages selected"
+            case let .missingArchive(path):
+                "DEB archive is not readable: \(path)"
             case let .failed(status):
                 "dpkg exited with status \(status)"
+            case let .failedWithOutput(status, output):
+                "dpkg exited with status \(status):\n\(output)"
             case let .spawnFailed(status, path):
                 "failed to launch \(path): \(String(cString: strerror(status)))"
             case let .waitFailed(status):
@@ -37,15 +43,72 @@ enum DebInstaller {
         let paths = packages.map(\.fileURL.path)
         await FFILogger.shared.log("Installing \(paths.count) deb package(s)...", level: .info)
 
-        let status = try await runDpkgInstall(paths: paths)
+        let staged = try stageArchives(packages)
+        defer { staged.cleanup() }
+
+        let result = try await runDpkgInstall(paths: staged.paths)
+        if !result.output.isEmpty {
+            await FFILogger.shared.log(result.output, level: result.status == 0 ? .info : .error)
+        }
+
+        let status = result.status
         guard status == 0 else {
-            throw Error.failed(status)
+            if result.output.isEmpty {
+                throw Error.failed(status)
+            }
+            throw Error.failedWithOutput(status, result.output)
         }
 
         await FFILogger.shared.log("dpkg install finished successfully", level: .info)
     }
 
-    private static func runDpkgInstall(paths: [String]) async throws -> Int32 {
+    private struct StagedArchives {
+        let directory: URL
+        let paths: [String]
+
+        func cleanup() {
+            try? FileManager.default.removeItem(at: directory)
+        }
+    }
+
+    private struct DpkgResult {
+        let status: Int32
+        let output: String
+    }
+
+    private static func stageArchives(_ packages: [DebPackage]) throws -> StagedArchives {
+        let fileManager = FileManager.default
+        let directory = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+            .appendingPathComponent("twackup-install-\(UUID().uuidString)", isDirectory: true)
+        try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+
+        var stagedPaths = [String]()
+        do {
+            for package in packages {
+                guard fileManager.isReadableFile(atPath: package.fileURL.path) else {
+                    throw Error.missingArchive(package.fileURL.path)
+                }
+
+                let safeName = package.id
+                    .replacingOccurrences(of: "/", with: "_")
+                    .replacingOccurrences(of: ":", with: "_")
+                let destination = directory.appendingPathComponent("\(safeName)_\(package.version).deb")
+                if fileManager.fileExists(atPath: destination.path) {
+                    try fileManager.removeItem(at: destination)
+                }
+
+                try fileManager.copyItem(at: package.fileURL, to: destination)
+                stagedPaths.append(destination.path)
+            }
+        } catch {
+            try? fileManager.removeItem(at: directory)
+            throw error
+        }
+
+        return StagedArchives(directory: directory, paths: stagedPaths)
+    }
+
+    private static func runDpkgInstall(paths: [String]) async throws -> DpkgResult {
         try await Task.detached(priority: .userInitiated) {
             let quotedPaths = paths.map(shellQuote).joined(separator: " ")
             let logPath = "/tmp/twackup-dpkg-install-\(UUID().uuidString).log"
@@ -62,12 +125,11 @@ enum DebInstaller {
             """
 
             let status = try runShell(command, shellPath: shellPath)
-            if let output = try? String(contentsOfFile: logPath), !output.isEmpty {
-                await FFILogger.shared.log(output.trimmingCharacters(in: .whitespacesAndNewlines), level: .info)
-            }
+            let output = (try? String(contentsOfFile: logPath))?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             try? FileManager.default.removeItem(atPath: logPath)
 
-            return status
+            return DpkgResult(status: status, output: output)
         }.value
     }
 

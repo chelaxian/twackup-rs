@@ -82,6 +82,13 @@ final class LogViewController: UIViewController, FFILoggerSubscriber, Scrollable
     }
 
     private func renderLog() {
+        guard currentText.length > 0 else {
+            logView.isHidden = true
+            scrollView.contentSize = .zero
+            return
+        }
+
+        logView.isHidden = false
         let category = UIApplication.shared.preferredContentSizeCategory
         let builder = StyledTextBuilder(attributedText: currentText)
         let renderer = StyledTextRenderer(string: builder.build(), contentSizeCategory: category)
@@ -108,27 +115,33 @@ final class LogViewController: UIViewController, FFILoggerSubscriber, Scrollable
     // MARK: - FFILoggerSubscriber
 
     func log(message: FFILogger.Message, level: FFILogger.Level) async {
-        let targetColor: UIColor = switch level {
-        case .off: .clear
-        case .debug: .systemIndigo
-        case .info: .systemBlue
-        case .warning: .systemOrange
-        case .error: .systemRed
+        await MainActor.run {
+            let targetColor: UIColor = switch level {
+            case .off: .clear
+            case .debug: .systemIndigo
+            case .info: .systemBlue
+            case .warning: .systemOrange
+            case .error: .systemRed
+            }
+
+            currentText.append(NSAttributedString(string: "[\(message.target ?? "nil")]  ", attributes: [
+                .font: UIFont.boldSystemFont(ofSize: UIFont.systemFontSize),
+                .foregroundColor: targetColor
+            ]))
+
+            currentText.append(NSAttributedString(string: message.text, attributes: [
+                .font: UIFont.monospacedSystemFont(ofSize: UIFont.systemFontSize, weight: .regular),
+                .foregroundColor: UIColor.label
+            ]))
+
+            currentText.append(NSAttributedString(string: "\n"))
+
+            wantsToScrollBottom = true
+            if isViewLoaded, view.window != nil {
+                renderLog()
+                scrollToBottomIfNeeded()
+            }
         }
-
-        currentText.append(NSAttributedString(string: "[\(message.target ?? "nil")]  ", attributes: [
-            .font: UIFont.boldSystemFont(ofSize: UIFont.systemFontSize),
-            .foregroundColor: targetColor
-        ]))
-
-        currentText.append(NSAttributedString(string: message.text, attributes: [
-            .font: UIFont.monospacedSystemFont(ofSize: UIFont.systemFontSize, weight: .regular),
-            .foregroundColor: UIColor.label
-        ]))
-
-        currentText.append(NSAttributedString(string: "\n"))
-
-        wantsToScrollBottom = true
     }
 
     func flush() async {
