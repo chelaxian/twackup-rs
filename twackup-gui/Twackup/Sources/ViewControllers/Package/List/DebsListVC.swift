@@ -165,8 +165,9 @@ final class DebsListVC: SelectablePackageListVC<DebPackage> {
         source button: UIBarButtonItem,
         cleanup: (() -> Void)? = nil
     ) {
+        let filzaProbeURL = URL(string: "filza://view")!
         let activities = items.compactMap { $0 as? URL }.first.flatMap { url in
-            FilzaExportActivity.canOpenFilza ? [FilzaExportActivity(fileURL: url)] : nil
+            UIApplication.shared.canOpenURL(filzaProbeURL) ? [FilzaExportActivity(fileURL: url)] : nil
         }
         let activityVC = UIActivityViewController(activityItems: items, applicationActivities: activities)
         activityVC.popoverPresentationController?.barButtonItem = button
@@ -239,12 +240,6 @@ final class DebsListVC: SelectablePackageListVC<DebPackage> {
 }
 
 private final class FilzaExportActivity: UIActivity {
-    private static let filzaProbeURL = URL(string: "filza://view")!
-
-    static var canOpenFilza: Bool {
-        UIApplication.shared.canOpenURL(filzaProbeURL)
-    }
-
     private let fileURL: URL
 
     init(fileURL: URL) {
@@ -265,7 +260,7 @@ private final class FilzaExportActivity: UIActivity {
     }
 
     override func canPerform(withActivityItems activityItems: [Any]) -> Bool {
-        Self.canOpenFilza && activityItems.contains { $0 is URL }
+        activityItems.contains { $0 is URL }
     }
 
     override func perform() {
@@ -291,8 +286,10 @@ private final class FilzaExportActivity: UIActivity {
                 return
             }
 
-            UIApplication.shared.open(filzaURL) { [weak self] opened in
-                self?.activityDidFinish(opened)
+            Task { @MainActor [weak self] in
+                UIApplication.shared.open(filzaURL) { opened in
+                    self?.activityDidFinish(opened)
+                }
             }
         } catch {
             activityDidFinish(false)
