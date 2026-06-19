@@ -52,7 +52,7 @@ enum DebInstaller {
             fi > \(quotedLogPath) 2>&1
             """
 
-            let rawStatus = system(command)
+            let rawStatus = runShell(command)
             if let output = try? String(contentsOfFile: logPath), !output.isEmpty {
                 await FFILogger.shared.log(output.trimmingCharacters(in: .whitespacesAndNewlines), level: .info)
             }
@@ -61,6 +61,36 @@ enum DebInstaller {
             guard rawStatus != -1 else { return -1 }
             return Int32((rawStatus >> 8) & 0xff)
         }.value
+    }
+
+    private static func runShell(_ command: String) -> Int32 {
+        var pid = pid_t()
+        var argv: [UnsafeMutablePointer<CChar>?] = [
+            strdup("/bin/sh"),
+            strdup("-c"),
+            strdup(command),
+            nil
+        ]
+        var env: [UnsafeMutablePointer<CChar>?] = [nil]
+        defer {
+            argv.compactMap { $0 }.forEach { free($0) }
+        }
+
+        let spawnStatus = posix_spawn(&pid, "/bin/sh", nil, nil, &argv, &env)
+        guard spawnStatus == 0 else {
+            return -1
+        }
+
+        var waitStatus: Int32 = 0
+        guard waitpid(pid, &waitStatus, 0) == pid else {
+            return -1
+        }
+
+        if (waitStatus & 0x7f) != 0 {
+            return waitStatus
+        }
+
+        return (waitStatus >> 8) & 0xff
     }
 
     private static func shellQuote(_ value: String) -> String {
