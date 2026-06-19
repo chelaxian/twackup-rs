@@ -15,6 +15,8 @@
 
 Twackup is a simple iOS tool for re-packaging installed packages to DEB's or
 backing up and restoring packages or repos. CLI version works from iOS 6 and later and GUI from iOS 14 and later.
+This fork also carries 2026 packaging updates for standard rootless jailbreaks
+and RootHide Bootstrap 2.2.x on iOS 17 arm64e devices.
 CLI can be also compiled and work fine on any Debian-based linux, though I do not support this platforms.
 
 Twackup uses custom dpkg database parser written and Rust - and it parses dpkg database a bit faster than dpkg itself.
@@ -68,6 +70,19 @@ and you'll find binary in `target` directory.
         $ cargo build-ios
         ```
         This will take a relatively large amount of time.It is about 30 mins for GitHub actions and 10 mins for my Mac.
+
+### Rootless and RootHide packages
+
+`cargo build-ios` emits separate artifacts:
+
+* `target/artifacts/rootless/*_iphoneos-arm64.deb` for standard rootless jailbreaks.
+* `target/artifacts/roothide/*_iphoneos-arm64e.deb` for RootHide Bootstrap.
+
+At runtime Twackup resolves the dpkg database in this order:
+
+1. the current bootstrap namespace, e.g. `/var/lib/dpkg`;
+2. standard rootless `/var/jb/var/lib/dpkg`;
+3. RootHide's active `.jbroot-*` directory under `/var/containers/Bundle/Application`.
 
 ## Contributing
 I'll be really glad to see you in contributors for this project.

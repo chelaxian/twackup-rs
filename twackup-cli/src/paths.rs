@@ -1,4 +1,7 @@
-use std::{ffi::OsString, path::PathBuf};
+use std::{
+    ffi::OsString,
+    path::{Path, PathBuf},
+};
 
 pub(crate) const LICENSE_PATH: &str = "/usr/share/doc/ru.danpashin.twackup/LICENSE";
 
@@ -8,15 +11,8 @@ pub(crate) fn dpkg_admin_dir() -> &'static str {
 }
 
 #[cfg(target_os = "ios")]
-pub(crate) fn dpkg_admin_dir() -> &'static str {
-    let rootfull_path = "/var/lib/dpkg";
-    let rootless_path = "/var/jb/var/lib/dpkg";
-
-    if std::fs::metadata(&rootfull_path).is_ok() {
-        rootfull_path
-    } else {
-        rootless_path
-    }
+pub(crate) fn dpkg_admin_dir() -> OsString {
+    jb_root_path("/var/lib/dpkg").into_os_string()
 }
 
 #[cfg(not(any(target_os = "macos", target_os = "ios")))]
@@ -26,20 +22,46 @@ pub(crate) fn dpkg_admin_dir() -> OsString {
 
 #[cfg(target_os = "ios")]
 pub(crate) fn jb_root_path(path: &str) -> PathBuf {
-    let rootful_path = PathBuf::from(path);
-    if std::fs::metadata(&rootful_path).is_ok() {
-        return rootful_path;
+    let input = Path::new(path);
+    let relative_path = input.strip_prefix("/").unwrap_or(input);
+
+    let candidates = [
+        PathBuf::from(path),
+        Path::new("/var/jb").join(relative_path),
+    ];
+
+    for candidate in candidates {
+        if std::fs::metadata(&candidate).is_ok() {
+            return candidate;
+        }
     }
 
-    let relative_path = std::path::Path::new(path)
-        .strip_prefix("/")
-        .unwrap_or_else(|_| std::path::Path::new(path));
-    let rootless_path = std::path::Path::new("/var/jb").join(relative_path);
-    if std::fs::metadata(&rootless_path).is_ok() {
-        rootless_path
-    } else {
-        rootful_path
+    if let Some(roothide_path) = roothide_jbroot_path(relative_path) {
+        return roothide_path;
     }
+
+    PathBuf::from(path)
+}
+
+#[cfg(target_os = "ios")]
+fn roothide_jbroot_path(relative_path: &Path) -> Option<PathBuf> {
+    let containers = Path::new("/var/containers/Bundle/Application");
+    let entries = std::fs::read_dir(containers).ok()?;
+
+    let mut matches: Vec<_> = entries
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .filter(|path| {
+            path.file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name.starts_with(".jbroot-"))
+        })
+        .map(|path| path.join(relative_path))
+        .filter(|path| std::fs::metadata(path).is_ok())
+        .collect();
+
+    matches.sort();
+    matches.pop()
 }
 
 #[cfg(not(target_os = "ios"))]

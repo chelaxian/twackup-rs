@@ -66,6 +66,14 @@ jobs:
             target/artifacts/rootless/*.deb
             target/artifacts/rootless/*.dSYM
 
+      - name: Upload RootHide artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Twackup-roothide-g${{ env.GIT_SHA }}
+          path: |
+            target/artifacts/roothide/*.deb
+            target/artifacts/roothide/*.dSYM
+
       - name: Upload IPA artifacts
         uses: actions/upload-artifact@v4
         with:

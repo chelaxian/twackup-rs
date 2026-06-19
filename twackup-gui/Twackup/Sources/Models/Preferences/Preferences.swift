@@ -16,7 +16,7 @@ class Preferences: ObservableObject {
 
     var followSymlinks: Bool {
         get {
-            pFollowSymlinks ?? FileManager.default.fileExists(atPath: "/var/jb/var/lib/dpkg")
+            pFollowSymlinks ?? isRootlessOrRootHideBootstrap()
         }
         set {
             pFollowSymlinks = newValue

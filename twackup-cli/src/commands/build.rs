@@ -61,7 +61,7 @@ fn should_follow_symlinks() -> bool {
 
 #[cfg(target_os = "ios")]
 pub(crate) fn should_follow_symlinks() -> bool {
-    std::fs::metadata("/var/jb/var/lib/dpkg").is_ok()
+    paths::jb_root_path("/var/lib/dpkg") != std::path::PathBuf::from("/var/lib/dpkg")
 }
 
 #[derive(clap::Parser)]

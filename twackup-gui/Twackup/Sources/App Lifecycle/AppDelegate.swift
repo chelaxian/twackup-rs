@@ -15,7 +15,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     private var consoleLoggerIsSet = false
 
     private(set) lazy var mainModel: MainModel = {
-        let dpkg = Dpkg(path: jbRootPath("/var/lib/dpkg"), preferences: preferences)
+        let dpkg = Dpkg(path: resolvedJailbreakPath("/var/lib/dpkg"), preferences: preferences)
         let database = Database(preferences: preferences)
         return MainModel(database: database, dpkg: dpkg, preferences: preferences)
     }()

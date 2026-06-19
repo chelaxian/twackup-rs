@@ -6,6 +6,7 @@ skip_rust_env_info = true
 [env]
 ARTIFACTS_DIR = "${CARGO_MAKE_CRATE_TARGET_DIRECTORY}/artifacts"
 ARTIFACTS_ROOTLESS_DIR = "${ARTIFACTS_DIR}/rootless"
+ARTIFACTS_ROOTHIDE_DIR = "${ARTIFACTS_DIR}/roothide"
 ARTIFACTS_ROOTFULL_DIR = "${ARTIFACTS_DIR}/rootfull"
 
 [tasks.test]
@@ -45,7 +46,7 @@ dependencies = ["create-artifacts-dir"]
 [tasks.create-artifacts-dir]
 command = "mkdir"
 private = true
-args = ["-p", "${ARTIFACTS_ROOTLESS_DIR}", "${ARTIFACTS_ROOTFULL_DIR}"]
+args = ["-p", "${ARTIFACTS_ROOTLESS_DIR}", "${ARTIFACTS_ROOTHIDE_DIR}", "${ARTIFACTS_ROOTFULL_DIR}"]
 
 [tasks.build-all]
 workspace = false

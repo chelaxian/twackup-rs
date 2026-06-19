@@ -80,6 +80,10 @@ run_task = "create-deb"
 env = { "DEB_ARCHITECTURE" = "iphoneos-arm64", "DEB_PREFIX" = "/var/jb", "ARTIFACTS_OUTPUT_DIR" = "${ARTIFACTS_ROOTLESS_DIR}" }
 run_task = "create-deb"
 
+[tasks.create-roothide-deb]
+env = { "DEB_ARCHITECTURE" = "iphoneos-arm64e", "DEB_PREFIX" = "", "ARTIFACTS_OUTPUT_DIR" = "${ARTIFACTS_ROOTHIDE_DIR}" }
+run_task = "create-deb"
+
 [tasks.create-package]
 dependencies = ["build-fat-binary", "sign-binary"]
-run_task = { name = ["create-rootfull-deb", "create-rootless-deb"] }
+run_task = { name = ["create-rootfull-deb", "create-rootless-deb", "create-roothide-deb"] }

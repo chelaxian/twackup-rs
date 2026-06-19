@@ -108,6 +108,17 @@ XCODE_SCHEME = "Twackup (Rootless)"
 ARTIFACTS_OUTPUT_DIR = "${ARTIFACTS_ROOTLESS_DIR}"
 DEB_DEPENDS = "${DEB_DEPENDS}, libroot-dopamine"
 
+[tasks.build-roothide]
+category = "Build"
+description = "Build RootHide DEB for RootHide Bootstrap"
+run_task = { name = ["build-and-sign", "create-deb"] }
+
+[tasks.build-roothide.env]
+DEB_ARCHITECTURE = "iphoneos-arm64e"
+DEB_PREFIX = ""
+XCODE_SCHEME = "Twackup (Rootfull)"
+ARTIFACTS_OUTPUT_DIR = "${ARTIFACTS_ROOTHIDE_DIR}"
+
 [tasks.build-ipa]
 category = "Build"
 description = "Build ipa file"
@@ -121,5 +132,5 @@ zip -rmT "${ARTIFACTS_DIR}/Twackup-${CARGO_MAKE_CRATE_VERSION}.ipa" Payload
 
 [tasks.build-all]
 category = "Build"
-description = "Build all available packages: rootfull/rootless debs and ipa file"
-run_task = { name = ["build-rootfull", "build-rootless", "build-ipa"] }
+description = "Build all available packages: rootfull/rootless/RootHide debs and ipa file"
+run_task = { name = ["build-rootfull", "build-rootless", "build-roothide", "build-ipa"] }
