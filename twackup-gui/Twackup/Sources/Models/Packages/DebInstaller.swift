@@ -5,6 +5,7 @@
 //  Created by Codex on 19.06.2026.
 //
 
+import Darwin
 import Foundation
 
 enum DebInstaller {
@@ -39,47 +40,26 @@ enum DebInstaller {
     }
 
     private static func runDpkgInstall(paths: [String]) async throws -> Int32 {
-        try await Task.detached(priority: .userInitiated) {
+        await Task.detached(priority: .userInitiated) {
             let quotedPaths = paths.map(shellQuote).joined(separator: " ")
+            let logPath = "/tmp/twackup-dpkg-install-\(UUID().uuidString).log"
+            let quotedLogPath = shellQuote(logPath)
             let command = """
             if [ -r /var/mobile/sudoi.pass ]; then \
               cat /var/mobile/sudoi.pass | sudo -S -p '' dpkg -i \(quotedPaths); \
             else \
               dpkg -i \(quotedPaths); \
-            fi
+            fi > \(quotedLogPath) 2>&1
             """
 
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: "/bin/sh")
-            process.arguments = ["-c", command]
-
-            let pipe = Pipe()
-            process.standardOutput = pipe
-            process.standardError = pipe
-
-            let handle = pipe.fileHandleForReading
-            let reader = Task {
-                var buffer = Data()
-                while true {
-                    let chunk = handle.availableData
-                    if chunk.isEmpty {
-                        break
-                    }
-
-                    buffer.append(chunk)
-                    if let text = String(data: buffer, encoding: .utf8) {
-                        await FFILogger.shared.log(text.trimmingCharacters(in: .whitespacesAndNewlines), level: .info)
-                        buffer.removeAll(keepingCapacity: true)
-                    }
-                }
+            let rawStatus = system(command)
+            if let output = try? String(contentsOfFile: logPath), !output.isEmpty {
+                await FFILogger.shared.log(output.trimmingCharacters(in: .whitespacesAndNewlines), level: .info)
             }
+            try? FileManager.default.removeItem(atPath: logPath)
 
-            try process.run()
-            process.waitUntilExit()
-            handle.closeFile()
-            await reader.value
-
-            return process.terminationStatus
+            guard rawStatus != -1 else { return -1 }
+            return Int32((rawStatus >> 8) & 0xff)
         }.value
     }
 
