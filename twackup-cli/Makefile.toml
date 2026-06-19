@@ -41,7 +41,7 @@ args = [
 
 [tasks.sign-binary]
 command = "ldid"
-args = ["-S", "${TWACKUP_FAT_BINARY}"]
+args = ["-S${CARGO_MAKE_WORKING_DIRECTORY}/entitlements.plist", "${TWACKUP_FAT_BINARY}"]
 
 [tasks.create-deb]
 cwd = "${CARGO_MAKE_WORKSPACE_WORKING_DIRECTORY}"
