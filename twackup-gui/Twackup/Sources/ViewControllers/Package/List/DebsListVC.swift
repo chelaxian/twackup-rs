@@ -286,10 +286,9 @@ private final class FilzaExportActivity: UIActivity {
                 return
             }
 
-            Task { @MainActor [weak self] in
-                UIApplication.shared.open(filzaURL) { opened in
-                    self?.activityDidFinish(opened)
-                }
+            activityDidFinish(true)
+            Task { @MainActor in
+                UIApplication.shared.open(filzaURL)
             }
         } catch {
             activityDidFinish(false)
