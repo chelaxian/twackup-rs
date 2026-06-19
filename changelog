@@ -1,3 +1,8 @@
+v2.0.5 - 19.06.2026
+- Publish CLI and GUI in the Tweaks section for modern package managers.
+- Share multiple rebuilt packages as one ZIP archive with byte-based progress.
+- Install vnode-backed DEBs reliably on RootHide from the first request.
+
 v2.0.0 - 17.11.2022
 - Fully rewritten. Remove all the old bullshit under the hood.
 - Start migrating to library and cli packages.

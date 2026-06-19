@@ -6,7 +6,7 @@ IPHONEOS_DEPLOYMENT_TARGET = "7.0"
 
 DEB_NAME = "Twackup (CLI)"
 DEB_IDENTIFIER = "ru.danpashin.twackup"
-DEB_SECTION = "Utilities"
+DEB_SECTION = "Tweaks"
 DEB_PRIORITY = "optional"
 DEB_DEPENDS = "firmware (>= 3.0)"
 DEB_CHANGELOG_FILE = "${CARGO_MAKE_WORKSPACE_WORKING_DIRECTORY}/changelog"

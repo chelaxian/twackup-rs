@@ -13,7 +13,7 @@ ARTIFACTS_OUTPUT_DIR = "${ARTIFACTS_DIR}"
 
 DEB_NAME = "Twackup (GUI)"
 DEB_IDENTIFIER = "ru.danpashin.twackup-gui"
-DEB_SECTION = "Utilities"
+DEB_SECTION = "Tweaks"
 DEB_PRIORITY = "optional"
 DEB_ARCHITECTURE = "iphoneos-arm"
 DEB_DEPENDS = "firmware (>= 14.0)"
