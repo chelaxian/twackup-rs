@@ -122,13 +122,59 @@ final class DebsListVC: SelectablePackageListVC<DebPackage> {
 
     @objc
     func actionShareSelected(_ button: UIBarButtonItem) {
-        let debURLS = dataSource.selected().map { $0.fileURL }
-        if debURLS.isEmpty { return }
+        let packages = dataSource.selected()
+        guard !packages.isEmpty else { return }
 
-        let activityVC = UIActivityViewController(activityItems: debURLS, applicationActivities: nil)
+        if packages.count == 1, let package = packages.first {
+            presentShareSheet(items: [package.fileURL], source: button)
+            return
+        }
+
+        button.isEnabled = false
+        let hud = Hud.show()
+        hud?.style = .arc
+        hud?.text = "ZIP"
+        hud?.detailedText = "0%"
+        hud?.setProgress(0.0, animated: false)
+
+        Task {
+            do {
+                let archive = try await DebShareArchive.make(packages: packages) { value in
+                    Task { @MainActor in
+                        let percent = Int((value * 100.0).rounded())
+                        hud?.detailedText = "\(percent)%"
+                        hud?.setProgress(CGFloat(value), animated: true)
+                    }
+                }
+                await hud?.hide(animated: true)
+                button.isEnabled = true
+                presentShareSheet(items: [archive.url], source: button) {
+                    archive.cleanup()
+                }
+            } catch {
+                await FFILogger.shared.log(error.localizedDescription, level: .error)
+                await hud?.hide(animated: true)
+                button.isEnabled = true
+                showShareError(error.localizedDescription)
+            }
+        }
+    }
+
+    private func presentShareSheet(
+        items: [Any],
+        source button: UIBarButtonItem,
+        cleanup: (() -> Void)? = nil
+    ) {
+        let activityVC = UIActivityViewController(activityItems: items, applicationActivities: nil)
         activityVC.popoverPresentationController?.barButtonItem = button
-
+        activityVC.completionWithItemsHandler = { _, _, _, _ in cleanup?() }
         present(activityVC, animated: true, completion: nil)
+    }
+
+    private func showShareError(_ message: String) {
+        let alert = UIAlertController(title: nil, message: message, preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "ok".localized, style: .default))
+        present(alert, animated: true)
     }
 
     func askAndDelete(packages: [DebPackage]) {
