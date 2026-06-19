@@ -165,7 +165,10 @@ final class DebsListVC: SelectablePackageListVC<DebPackage> {
         source button: UIBarButtonItem,
         cleanup: (() -> Void)? = nil
     ) {
-        let activityVC = UIActivityViewController(activityItems: items, applicationActivities: nil)
+        let activities = items.compactMap { $0 as? URL }.first.flatMap { url in
+            FilzaExportActivity.canOpenFilza ? [FilzaExportActivity(fileURL: url)] : nil
+        }
+        let activityVC = UIActivityViewController(activityItems: items, applicationActivities: activities)
         activityVC.popoverPresentationController?.barButtonItem = button
         activityVC.completionWithItemsHandler = { _, _, _, _ in cleanup?() }
         present(activityVC, animated: true, completion: nil)
@@ -232,5 +235,67 @@ final class DebsListVC: SelectablePackageListVC<DebPackage> {
         )
         alert.addAction(UIAlertAction(title: "ok".localized, style: .default))
         present(alert, animated: true)
+    }
+}
+
+private final class FilzaExportActivity: UIActivity {
+    private static let filzaProbeURL = URL(string: "filza://view")!
+
+    static var canOpenFilza: Bool {
+        UIApplication.shared.canOpenURL(filzaProbeURL)
+    }
+
+    private let fileURL: URL
+
+    init(fileURL: URL) {
+        self.fileURL = fileURL
+        super.init()
+    }
+
+    override var activityType: UIActivity.ActivityType? {
+        UIActivity.ActivityType("ru.danpashin.twackup.open-in-filza")
+    }
+
+    override var activityTitle: String? {
+        "Filza"
+    }
+
+    override var activityImage: UIImage? {
+        UIImage(systemName: "folder.fill")
+    }
+
+    override func canPerform(withActivityItems activityItems: [Any]) -> Bool {
+        Self.canOpenFilza && activityItems.contains { $0 is URL }
+    }
+
+    override func perform() {
+        do {
+            let exportsDirectory = URL(fileURLWithPath: "/var/mobile/Documents/Twackup", isDirectory: true)
+            try FileManager.default.createDirectory(
+                at: exportsDirectory,
+                withIntermediateDirectories: true
+            )
+
+            let destination = exportsDirectory.appendingPathComponent(fileURL.lastPathComponent)
+            if FileManager.default.fileExists(atPath: destination.path) {
+                try FileManager.default.removeItem(at: destination)
+            }
+            try FileManager.default.copyItem(at: fileURL, to: destination)
+
+            var components = URLComponents()
+            components.scheme = "filza"
+            components.host = "view"
+            components.path = destination.path
+            guard let filzaURL = components.url else {
+                activityDidFinish(false)
+                return
+            }
+
+            UIApplication.shared.open(filzaURL) { [weak self] opened in
+                self?.activityDidFinish(opened)
+            }
+        } catch {
+            activityDidFinish(false)
+        }
     }
 }
