@@ -118,6 +118,7 @@ DEB_ARCHITECTURE = "iphoneos-arm64e"
 DEB_PREFIX = ""
 XCODE_SCHEME = "Twackup (Rootfull)"
 ARTIFACTS_OUTPUT_DIR = "${ARTIFACTS_ROOTHIDE_DIR}"
+DEB_DEPENDS = "firmware (>= 14.0)"
 
 [tasks.build-ipa]
 category = "Build"
