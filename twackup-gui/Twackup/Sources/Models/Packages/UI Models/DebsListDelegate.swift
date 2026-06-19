@@ -30,7 +30,14 @@ class DebsListDelegate: PackageListDelegate<DebPackage> {
         }
         delete.image = UIImage(systemName: "trash.fill")
 
-        return UISwipeActionsConfiguration(actions: [delete])
+        let install = UIContextualAction(style: .normal, title: "install-btn".localized) { _, _, completion in
+            self.debsListController?.install(packages: [package])
+            completion(true)
+        }
+        install.image = UIImage(systemName: "wrench.and.screwdriver.fill") ?? UIImage(systemName: "wrench.fill")
+        install.backgroundColor = .systemGreen
+
+        return UISwipeActionsConfiguration(actions: [delete, install])
     }
 
     @objc(tableView:contextMenuConfigurationForRowAtIndexPath:point:)
@@ -54,7 +61,14 @@ class DebsListDelegate: PackageListDelegate<DebPackage> {
                 self.debsListController?.askAndDelete(packages: [package])
             }
 
-            var children = [copyID, remove]
+            let install = UIAction(
+                title: "install-btn".localized,
+                image: UIImage(systemName: "wrench.and.screwdriver") ?? UIImage(systemName: "wrench")
+            ) { _ in
+                self.debsListController?.install(packages: [package])
+            }
+
+            var children = [copyID, install, remove]
 
             // valid url so it's safe to unwrap
             let filzaURL = URL(string: "filza://\(package.fileURL.path)")!

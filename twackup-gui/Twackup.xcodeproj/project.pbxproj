@@ -39,6 +39,7 @@
 		0B50FF722949EA7700CF4BCF /* DiskStats.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B50FF712949EA7700CF4BCF /* DiskStats.swift */; };
 		0B50FF742949EAB900CF4BCF /* DiskSpaceUsageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B50FF732949EAB900CF4BCF /* DiskSpaceUsageView.swift */; };
 		0B5B328C2943827500B51274 /* PackagesRebuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B5B328B2943827500B51274 /* PackagesRebuilder.swift */; };
+		0B5B329E2DD50B3C00B51274 /* DebInstaller.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B5B329D2DD50B3C00B51274 /* DebInstaller.swift */; };
 		0B5B332B294DA9F00097398F /* MainModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B5B332A294DA9F00097398F /* MainModel.swift */; };
 		0B5B332D294DB55B0097398F /* NavigationController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B5B332C294DB55B0097398F /* NavigationController.swift */; };
 		0B5D3F972934CB2C00AE50F2 /* PackageDataProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B5D3F962934CB2C00AE50F2 /* PackageDataProvider.swift */; };
@@ -125,6 +126,7 @@
 		0B50FF712949EA7700CF4BCF /* DiskStats.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiskStats.swift; sourceTree = "<group>"; };
 		0B50FF732949EAB900CF4BCF /* DiskSpaceUsageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiskSpaceUsageView.swift; sourceTree = "<group>"; };
 		0B5B328B2943827500B51274 /* PackagesRebuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PackagesRebuilder.swift; sourceTree = "<group>"; };
+		0B5B329D2DD50B3C00B51274 /* DebInstaller.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebInstaller.swift; sourceTree = "<group>"; };
 		0B5B332A294DA9F00097398F /* MainModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainModel.swift; sourceTree = "<group>"; };
 		0B5B332C294DB55B0097398F /* NavigationController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavigationController.swift; sourceTree = "<group>"; };
 		0B5D3F962934CB2C00AE50F2 /* PackageDataProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PackageDataProvider.swift; sourceTree = "<group>"; };
@@ -412,6 +414,7 @@
 				0B48EF442C200CA7007C0EC0 /* UI Models */,
 				0B88C3162930CE3900BA5312 /* Metadata.swift */,
 				0B5B328B2943827500B51274 /* PackagesRebuilder.swift */,
+				0B5B329D2DD50B3C00B51274 /* DebInstaller.swift */,
 				0BAAD99A293893CB0089C8FB /* Data Providers */,
 			);
 			path = Packages;
@@ -703,6 +706,7 @@
 				0B0DBB6F2934FA58002F3BB2 /* String.swift in Sources */,
 				0B50FF6E2949B80900CF4BCF /* CapacityBarLabel.swift in Sources */,
 				0B5B328C2943827500B51274 /* PackagesRebuilder.swift in Sources */,
+				0B5B329E2DD50B3C00B51274 /* DebInstaller.swift in Sources */,
 				0B2636F02948EC0A003EA806 /* CapacityBarView.swift in Sources */,
 				0B5D3F972934CB2C00AE50F2 /* PackageDataProvider.swift in Sources */,
 				0BE87E982C1E23A2009C95A7 /* Hud.swift in Sources */,

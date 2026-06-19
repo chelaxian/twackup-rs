@@ -31,6 +31,12 @@ final class DebsListVC: SelectablePackageListVC<DebPackage> {
         })
     }()
 
+    private(set) lazy var installSelectedBarBtn: UIBarButtonItem = {
+        UIBarButtonItem(title: "debs-install-selected-btn".localized, primaryAction: UIAction { [self] _ in
+            install(packages: dataSource.selected())
+        })
+    }()
+
     private(set) lazy var shareSelectedBarBtn: UIBarButtonItem = {
         let title = "debs-share-btn".localized
         return UIBarButtonItem(title: title, style: .plain, target: self, action: #selector(actionShareSelected))
@@ -72,6 +78,7 @@ final class DebsListVC: SelectablePackageListVC<DebPackage> {
             let isAnySelected = dataSource.isAnySelected
 
             shareSelectedBarBtn.isEnabled = isAnySelected
+            installSelectedBarBtn.isEnabled = isAnySelected
             guard var buttons = toolbarItems, !buttons.isEmpty else { return }
             buttons[0] = isAnySelected ? removeSelectedBarBtn : removeAllBarBtn
             setToolbarItems(buttons, animated: false)
@@ -102,9 +109,10 @@ final class DebsListVC: SelectablePackageListVC<DebPackage> {
 
         if editing {
             shareSelectedBarBtn.isEnabled = false
+            installSelectedBarBtn.isEnabled = false
 
             let spacer = UIBarButtonItem(barButtonSystemItem: .flexibleSpace, target: nil, action: nil)
-            setToolbarItems([removeAllBarBtn, spacer, shareSelectedBarBtn], animated: false)
+            setToolbarItems([removeAllBarBtn, spacer, installSelectedBarBtn, spacer, shareSelectedBarBtn], animated: false)
         }
 
         navigationController?.setToolbarHidden(!editing, animated: animated)
@@ -138,6 +146,45 @@ final class DebsListVC: SelectablePackageListVC<DebPackage> {
 
         alert.addAction(UIAlertAction(title: "cancel".localized, style: .cancel))
 
+        present(alert, animated: true)
+    }
+
+    func install(packages: [DebPackage]) {
+        guard !packages.isEmpty else { return }
+
+        let alert = UIAlertController(
+            title: "deb-install-alert-title".localized,
+            message: "deb-install-alert-subtitle".localized,
+            preferredStyle: .alert
+        )
+
+        alert.addAction(UIAlertAction(title: "install-btn".localized, style: .default) { [self] _ in
+            Task {
+                do {
+                    try await DebInstaller.install(packages: packages)
+                    await MainActor.run {
+                        showInstallResult(success: true, message: "deb-install-success".localized)
+                    }
+                } catch {
+                    await FFILogger.shared.log(error.localizedDescription, level: .error)
+                    await MainActor.run {
+                        showInstallResult(success: false, message: error.localizedDescription)
+                    }
+                }
+            }
+        })
+
+        alert.addAction(UIAlertAction(title: "cancel".localized, style: .cancel))
+        present(alert, animated: true)
+    }
+
+    private func showInstallResult(success: Bool, message: String) {
+        let alert = UIAlertController(
+            title: success ? "deb-install-success-title".localized : "deb-install-failure-title".localized,
+            message: message,
+            preferredStyle: .alert
+        )
+        alert.addAction(UIAlertAction(title: "ok".localized, style: .default))
         present(alert, animated: true)
     }
 }
