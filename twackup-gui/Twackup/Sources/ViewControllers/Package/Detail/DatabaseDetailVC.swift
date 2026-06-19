@@ -81,13 +81,27 @@ class DatabaseDetailVC: PackageDetailVC<DebPackage> {
             Task {
                 try? await mainModel.database.delete(package: package)
                 await MainActor.run {
+                    self.package = nil
                     NotificationCenter.default.post(name: .DebsReload, object: nil)
-                    navigationController?.popViewController(animated: true)
+                    returnToDebsList()
                 }
             }
         })
         alert.addAction(UIAlertAction(title: "cancel".localized, style: .cancel))
         present(alert, animated: true)
+    }
+
+    private func returnToDebsList() {
+        navigationController?.setToolbarHidden(true, animated: true)
+
+        if let navigationController, navigationController.viewControllers.count > 1 {
+            navigationController.popViewController(animated: true)
+            return
+        }
+
+        if let splitViewController {
+            splitViewController.show(.primary)
+        }
     }
 
     private func configureToolbar() {

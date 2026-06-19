@@ -12,6 +12,8 @@ enum DebInstaller {
     enum Error: LocalizedError {
         case noPackages
         case failed(Int32)
+        case spawnFailed(Int32, String)
+        case waitFailed(Int32)
 
         var errorDescription: String? {
             switch self {
@@ -19,6 +21,10 @@ enum DebInstaller {
                 "No packages selected"
             case let .failed(status):
                 "dpkg exited with status \(status)"
+            case let .spawnFailed(status, path):
+                "failed to launch \(path): \(String(cString: strerror(status)))"
+            case let .waitFailed(status):
+                "failed to wait for dpkg: \(String(cString: strerror(status)))"
             }
         }
     }
@@ -40,50 +46,56 @@ enum DebInstaller {
     }
 
     private static func runDpkgInstall(paths: [String]) async throws -> Int32 {
-        await Task.detached(priority: .userInitiated) {
+        try await Task.detached(priority: .userInitiated) {
             let quotedPaths = paths.map(shellQuote).joined(separator: " ")
             let logPath = "/tmp/twackup-dpkg-install-\(UUID().uuidString).log"
             let quotedLogPath = shellQuote(logPath)
+            let shellPath = bootstrapPath("/usr/bin/dash")
+            let sudoPath = bootstrapPath("/usr/bin/sudo")
+            let dpkgPath = bootstrapPath("/usr/bin/dpkg")
             let command = """
             if [ -r /var/mobile/sudoi.pass ]; then \
-              cat /var/mobile/sudoi.pass | sudo -S -p '' dpkg -i \(quotedPaths); \
+              cat /var/mobile/sudoi.pass | \(shellQuote(sudoPath)) -S -p '' \(shellQuote(dpkgPath)) -i \(quotedPaths); \
             else \
-              dpkg -i \(quotedPaths); \
+              \(shellQuote(dpkgPath)) -i \(quotedPaths); \
             fi > \(quotedLogPath) 2>&1
             """
 
-            let rawStatus = runShell(command)
+            let status = try runShell(command, shellPath: shellPath)
             if let output = try? String(contentsOfFile: logPath), !output.isEmpty {
                 await FFILogger.shared.log(output.trimmingCharacters(in: .whitespacesAndNewlines), level: .info)
             }
             try? FileManager.default.removeItem(atPath: logPath)
 
-            guard rawStatus != -1 else { return -1 }
-            return Int32((rawStatus >> 8) & 0xff)
+            return status
         }.value
     }
 
-    private static func runShell(_ command: String) -> Int32 {
+    private static func runShell(_ command: String, shellPath: String) throws -> Int32 {
         var pid = pid_t()
         var argv: [UnsafeMutablePointer<CChar>?] = [
-            strdup("/bin/sh"),
+            strdup(shellPath),
             strdup("-c"),
             strdup(command),
             nil
         ]
-        var env: [UnsafeMutablePointer<CChar>?] = [nil]
+        var env: [UnsafeMutablePointer<CChar>?] = [
+            strdup("PATH=\(bootstrapPath("/usr/bin")):\(bootstrapPath("/bin")):/usr/bin:/bin"),
+            nil
+        ]
         defer {
             argv.compactMap { $0 }.forEach { free($0) }
+            env.compactMap { $0 }.forEach { free($0) }
         }
 
-        let spawnStatus = posix_spawn(&pid, "/bin/sh", nil, nil, &argv, &env)
+        let spawnStatus = posix_spawn(&pid, shellPath, nil, nil, &argv, &env)
         guard spawnStatus == 0 else {
-            return -1
+            throw Error.spawnFailed(spawnStatus, shellPath)
         }
 
         var waitStatus: Int32 = 0
         guard waitpid(pid, &waitStatus, 0) == pid else {
-            return -1
+            throw Error.waitFailed(errno)
         }
 
         if (waitStatus & 0x7f) != 0 {
@@ -91,6 +103,16 @@ enum DebInstaller {
         }
 
         return (waitStatus >> 8) & 0xff
+    }
+
+    private static func bootstrapPath(_ path: String) -> String {
+        let fileManager = FileManager.default
+        let librootPath = jbRootPath(path)
+        if !librootPath.isEmpty, fileManager.fileExists(atPath: librootPath) {
+            return librootPath
+        }
+
+        return resolvedJailbreakPath(path)
     }
 
     private static func shellQuote(_ value: String) -> String {

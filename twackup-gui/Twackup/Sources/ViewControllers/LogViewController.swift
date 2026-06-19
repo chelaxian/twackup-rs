@@ -29,8 +29,6 @@ final class LogViewController: UIViewController, FFILoggerSubscriber, Scrollable
         view.alwaysBounceVertical = true
         view.addSubview(logView)
 
-        view.bs.setDataSourceAndDelegate(self)
-
         return view
     }()
 
@@ -80,7 +78,6 @@ final class LogViewController: UIViewController, FFILoggerSubscriber, Scrollable
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
 
-        scrollView.bs.reloadBlankSlate()
         scrollToBottomIfNeeded()
     }
 
@@ -106,7 +103,6 @@ final class LogViewController: UIViewController, FFILoggerSubscriber, Scrollable
         renderLog()
 
         scrollView.contentOffset = scrollView.minimumContentOffset
-        scrollView.bs.reloadBlankSlate()
     }
 
     // MARK: - FFILoggerSubscriber

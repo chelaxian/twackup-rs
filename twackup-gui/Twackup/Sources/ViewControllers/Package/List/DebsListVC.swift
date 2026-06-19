@@ -26,13 +26,13 @@ final class DebsListVC: SelectablePackageListVC<DebPackage> {
     }()
 
     private(set) lazy var removeSelectedBarBtn: UIBarButtonItem = {
-        UIBarButtonItem(title: "debs-remove-selected-btn".localized, primaryAction: UIAction { [self] _ in
+        UIBarButtonItem(title: "remove-btn".localized, primaryAction: UIAction { [self] _ in
             askAndDelete(packages: dataSource.selected())
         })
     }()
 
     private(set) lazy var installSelectedBarBtn: UIBarButtonItem = {
-        UIBarButtonItem(title: "debs-install-selected-btn".localized, primaryAction: UIAction { [self] _ in
+        UIBarButtonItem(title: "install-btn".localized, primaryAction: UIAction { [self] _ in
             install(packages: dataSource.selected())
         })
     }()
