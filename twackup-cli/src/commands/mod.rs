@@ -51,12 +51,12 @@ impl GlobalOptions {
         leaves_only: bool,
         sort: PackagesSort,
     ) -> Result<BTreeMap<String, Package>> {
-        let dpkg = Dpkg::new(&self.admin_dir, true);
+        let dpkg = Dpkg::new(&self.admin_dir, false);
         Ok(dpkg.packages(leaves_only, sort).await?)
     }
 
     pub(crate) async fn unsorted_packages(&self, leaves_only: bool) -> Result<LinkedList<Package>> {
-        let dpkg = Dpkg::new(&self.admin_dir, true);
+        let dpkg = Dpkg::new(&self.admin_dir, false);
         Ok(dpkg.unsorted_packages(leaves_only).await?)
     }
 }

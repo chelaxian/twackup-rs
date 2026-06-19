@@ -7,12 +7,13 @@
 
 import BlankSlate
 
+@MainActor
 extension LogViewController: @preconcurrency BlankSlate.DataSource, @preconcurrency BlankSlate.Delegate {
-    nonisolated func title(forBlankSlate view: UIView) -> NSAttributedString? {
+    func title(forBlankSlate view: UIView) -> NSAttributedString? {
         NSAttributedString(string: "log-controller-empty-title".localized)
     }
 
-    nonisolated func detail(forBlankSlate view: UIView) -> NSAttributedString? {
+    func detail(forBlankSlate view: UIView) -> NSAttributedString? {
         NSAttributedString(string: "log-controller-empty-subtitle".localized)
     }
 
@@ -26,8 +27,8 @@ extension LogViewController: @preconcurrency BlankSlate.DataSource, @preconcurre
     func imageTintColor(forBlankSlate view: UIView) -> UIColor? {
         .tertiaryLabel
     }
-    
+
     func blankSlateShouldDisplay(_ view: UIView) -> Bool {
-        MainActor.assumeIsolated { currentText.length == 0 }
+        currentText.length == 0
     }
 }
