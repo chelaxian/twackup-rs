@@ -40,11 +40,12 @@ enum DebInstaller {
             throw Error.noPackages
         }
 
-        let paths = packages.map(\.fileURL.path)
-        await FFILogger.shared.log("Installing \(paths.count) deb package(s)...", level: .info)
+        await FFILogger.shared.log("Staging \(packages.count) deb package(s)...", level: .info)
 
-        let staged = try stageArchives(packages)
+        let staged = try await stageArchives(packages)
         defer { staged.cleanup() }
+
+        await FFILogger.shared.log("Installing \(staged.paths.count) deb package(s)...", level: .info)
 
         let result = try await runDpkgInstall(paths: staged.paths)
         if !result.output.isEmpty {
@@ -76,36 +77,70 @@ enum DebInstaller {
         let output: String
     }
 
-    private static func stageArchives(_ packages: [DebPackage]) throws -> StagedArchives {
-        let fileManager = FileManager.default
-        let directory = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
-            .appendingPathComponent("twackup-install-\(UUID().uuidString)", isDirectory: true)
-        try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+    private static func stageArchives(_ packages: [DebPackage]) async throws -> StagedArchives {
+        try await Task.detached(priority: .userInitiated) {
+            let fileManager = FileManager.default
+            let directory = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+                .appendingPathComponent("twackup-install-\(UUID().uuidString)", isDirectory: true)
+            try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
 
-        var stagedPaths = [String]()
-        do {
-            for package in packages {
-                guard fileManager.isReadableFile(atPath: package.fileURL.path) else {
-                    throw Error.missingArchive(package.fileURL.path)
+            var stagedPaths = [String]()
+            do {
+                for package in packages {
+                    let safeName = package.id
+                        .replacingOccurrences(of: "/", with: "_")
+                        .replacingOccurrences(of: ":", with: "_")
+                    let destination = directory.appendingPathComponent("\(safeName)_\(package.version).deb")
+
+                    try streamCopyArchive(from: package.fileURL, to: destination)
+                    stagedPaths.append(destination.path)
                 }
-
-                let safeName = package.id
-                    .replacingOccurrences(of: "/", with: "_")
-                    .replacingOccurrences(of: ":", with: "_")
-                let destination = directory.appendingPathComponent("\(safeName)_\(package.version).deb")
-                if fileManager.fileExists(atPath: destination.path) {
-                    try fileManager.removeItem(at: destination)
-                }
-
-                try fileManager.copyItem(at: package.fileURL, to: destination)
-                stagedPaths.append(destination.path)
+            } catch {
+                try? fileManager.removeItem(at: directory)
+                throw error
             }
-        } catch {
-            try? fileManager.removeItem(at: directory)
-            throw error
+
+            return StagedArchives(directory: directory, paths: stagedPaths)
+        }.value
+    }
+
+    private static func streamCopyArchive(from source: URL, to destination: URL) throws {
+        let fileManager = FileManager.default
+        if fileManager.fileExists(atPath: destination.path) {
+            try fileManager.removeItem(at: destination)
         }
 
-        return StagedArchives(directory: directory, paths: stagedPaths)
+        guard fileManager.createFile(atPath: destination.path, contents: nil) else {
+            throw Error.missingArchive(destination.path)
+        }
+
+        let input: FileHandle
+        do {
+            input = try FileHandle(forReadingFrom: source)
+        } catch {
+            throw Error.missingArchive("\(source.path): \(error.localizedDescription)")
+        }
+
+        let output = try FileHandle(forWritingTo: destination)
+        defer {
+            try? input.close()
+            try? output.close()
+        }
+
+        while true {
+            let data = try input.read(upToCount: 1024 * 1024)
+            guard let data, !data.isEmpty else {
+                break
+            }
+
+            try output.write(contentsOf: data)
+        }
+
+        let attributes = try fileManager.attributesOfItem(atPath: destination.path)
+        let size = (attributes[.size] as? NSNumber)?.int64Value ?? 0
+        guard size > 0 else {
+            throw Error.missingArchive("\(source.path): staged archive is empty")
+        }
     }
 
     private static func runDpkgInstall(paths: [String]) async throws -> DpkgResult {
