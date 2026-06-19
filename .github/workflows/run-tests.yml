@@ -1,6 +1,7 @@
 name: Build and test project
 
 on:
+  workflow_dispatch:
   push:
     branches: [ "master" ]
   pull_request:
