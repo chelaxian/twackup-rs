@@ -63,16 +63,16 @@ enum DebInstaller {
 
     private static func performInstall(packages: [DebPackage]) async throws {
 
-        await FFILogger.shared.log("Staging \(packages.count) deb package(s)...", level: .info)
+        emitLog("Staging \(packages.count) deb package(s)...", level: .info)
 
         let staged = try await stageArchives(packages)
         defer { staged.cleanup() }
 
-        await FFILogger.shared.log("Installing \(staged.paths.count) deb package(s)...", level: .info)
+        emitLog("Installing \(staged.paths.count) deb package(s)...", level: .info)
 
         let result = try await runDpkgInstall(paths: staged.paths)
         if !result.output.isEmpty {
-            await FFILogger.shared.log(result.output, level: result.status == 0 ? .info : .error)
+            emitLog(result.output, level: result.status == 0 ? .info : .error)
         }
 
         let status = result.status
@@ -83,7 +83,7 @@ enum DebInstaller {
             throw Error.failedWithOutput(status, result.output)
         }
 
-        await FFILogger.shared.log("dpkg install finished successfully", level: .info)
+        emitLog("dpkg install finished successfully", level: .info)
     }
 
     struct StagedArchives {
@@ -308,6 +308,12 @@ enum DebInstaller {
 
     private static func shellQuote(_ value: String) -> String {
         "'\(value.replacingOccurrences(of: "'", with: "'\\''"))'"
+    }
+
+    private static func emitLog(_ text: String, level: FFILogger.Level) {
+        Task(priority: .utility) {
+            await FFILogger.shared.log(text, level: level)
+        }
     }
 
 }
