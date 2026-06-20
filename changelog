@@ -1,3 +1,8 @@
+v2.0.6 - 20.06.2026
+- Stage single DEBs before sharing so destination apps open reliably.
+- Launch dpkg directly through sudo and reject duplicate concurrent installs.
+- Open Filza before completing its custom share activity.
+
 v2.0.5 - 19.06.2026
 - Publish CLI and GUI in the Tweaks section for modern package managers.
 - Share multiple rebuilt packages as one ZIP archive with byte-based progress.

@@ -16,6 +16,7 @@ enum DebInstaller {
         case failedWithOutput(Int32, String)
         case spawnFailed(Int32, String)
         case waitFailed(Int32)
+        case installInProgress
 
         var errorDescription: String? {
             switch self {
@@ -31,14 +32,33 @@ enum DebInstaller {
                 "failed to launch \(path): \(String(cString: strerror(status)))"
             case let .waitFailed(status):
                 "failed to wait for dpkg: \(String(cString: strerror(status)))"
+            case .installInProgress:
+                "Package installation is already in progress"
             }
         }
     }
+
+    private static let installGate = InstallGate()
 
     static func install(packages: [DebPackage]) async throws {
         guard !packages.isEmpty else {
             throw Error.noPackages
         }
+
+        guard await installGate.begin() else {
+            throw Error.installInProgress
+        }
+
+        do {
+            try await performInstall(packages: packages)
+            await installGate.finish()
+        } catch {
+            await installGate.finish()
+            throw error
+        }
+    }
+
+    private static func performInstall(packages: [DebPackage]) async throws {
 
         await FFILogger.shared.log("Staging \(packages.count) deb package(s)...", level: .info)
 
@@ -160,21 +180,21 @@ enum DebInstaller {
 
     private static func runDpkgInstall(paths: [String]) async throws -> DpkgResult {
         try await Task.detached(priority: .userInitiated) {
-            let quotedPaths = paths.map(shellQuote).joined(separator: " ")
             let logPath = "/tmp/twackup-dpkg-install-\(UUID().uuidString).log"
-            let quotedLogPath = shellQuote(logPath)
-            let shellPath = bootstrapPath("/usr/bin/dash")
             let sudoPath = bootstrapPath("/usr/bin/sudo")
             let dpkgPath = bootstrapPath("/usr/bin/dpkg")
-            let command = """
-            if [ -r /var/mobile/sudoi.pass ]; then \
-              cat /var/mobile/sudoi.pass | \(shellQuote(sudoPath)) -S -p '' \(shellQuote(dpkgPath)) -i \(quotedPaths); \
-            else \
-              \(shellQuote(dpkgPath)) -i \(quotedPaths); \
-            fi > \(quotedLogPath) 2>&1
-            """
+            let passwordPath = "/var/mobile/sudoi.pass"
+            let useSudo = FileManager.default.isReadableFile(atPath: passwordPath)
+            let executable = useSudo ? sudoPath : dpkgPath
+            var arguments = useSudo ? [sudoPath, "-S", "-p", "", dpkgPath, "-i"] : [dpkgPath, "-i"]
+            arguments.append(contentsOf: paths)
 
-            let status = try runShell(command, shellPath: shellPath)
+            let status = try runProcess(
+                executable: executable,
+                arguments: arguments,
+                standardInput: useSudo ? passwordPath : "/dev/null",
+                logPath: logPath
+            )
             let output = (try? String(contentsOfFile: logPath))?
                 .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             try? FileManager.default.removeItem(atPath: logPath)
@@ -183,16 +203,45 @@ enum DebInstaller {
         }.value
     }
 
-    private static func runShell(_ command: String, shellPath: String) throws -> Int32 {
+    private static func runProcess(
+        executable: String,
+        arguments: [String],
+        standardInput: String,
+        logPath: String
+    ) throws -> Int32 {
+        let inputFD = open(standardInput, O_RDONLY)
+        guard inputFD >= 0 else {
+            throw Error.spawnFailed(errno, standardInput)
+        }
+        defer { close(inputFD) }
+
+        let outputFD = open(logPath, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR)
+        guard outputFD >= 0 else {
+            throw Error.spawnFailed(errno, logPath)
+        }
+        defer { close(outputFD) }
+
+        var fileActions: posix_spawn_file_actions_t?
+        var actionStatus = posix_spawn_file_actions_init(&fileActions)
+        guard actionStatus == 0 else {
+            throw Error.spawnFailed(actionStatus, executable)
+        }
+        defer { posix_spawn_file_actions_destroy(&fileActions) }
+
+        actionStatus = posix_spawn_file_actions_adddup2(&fileActions, inputFD, STDIN_FILENO)
+        guard actionStatus == 0 else { throw Error.spawnFailed(actionStatus, executable) }
+        actionStatus = posix_spawn_file_actions_adddup2(&fileActions, outputFD, STDOUT_FILENO)
+        guard actionStatus == 0 else { throw Error.spawnFailed(actionStatus, executable) }
+        actionStatus = posix_spawn_file_actions_adddup2(&fileActions, outputFD, STDERR_FILENO)
+        guard actionStatus == 0 else { throw Error.spawnFailed(actionStatus, executable) }
+
         var pid = pid_t()
-        var argv: [UnsafeMutablePointer<CChar>?] = [
-            strdup(shellPath),
-            strdup("-c"),
-            strdup(command),
-            nil
-        ]
+        var argv = arguments.map(strdup) + [nil]
         var env: [UnsafeMutablePointer<CChar>?] = [
             strdup("PATH=\(bootstrapPath("/usr/bin")):\(bootstrapPath("/bin")):/usr/bin:/bin"),
+            strdup("HOME=/var/mobile"),
+            strdup("USER=mobile"),
+            strdup("LOGNAME=mobile"),
             nil
         ]
         defer {
@@ -200,13 +249,17 @@ enum DebInstaller {
             env.compactMap { $0 }.forEach { free($0) }
         }
 
-        let spawnStatus = posix_spawn(&pid, shellPath, nil, nil, &argv, &env)
+        let spawnStatus = posix_spawn(&pid, executable, &fileActions, nil, &argv, &env)
         guard spawnStatus == 0 else {
-            throw Error.spawnFailed(spawnStatus, shellPath)
+            throw Error.spawnFailed(spawnStatus, executable)
         }
 
         var waitStatus: Int32 = 0
-        guard waitpid(pid, &waitStatus, 0) == pid else {
+        var waitedPID: pid_t
+        repeat {
+            waitedPID = waitpid(pid, &waitStatus, 0)
+        } while waitedPID == -1 && errno == EINTR
+        guard waitedPID == pid else {
             throw Error.waitFailed(errno)
         }
 
@@ -227,8 +280,19 @@ enum DebInstaller {
         return resolvedJailbreakPath(path)
     }
 
-    private static func shellQuote(_ value: String) -> String {
-        "'\(value.replacingOccurrences(of: "'", with: "'\\''"))'"
+}
+
+private actor InstallGate {
+    private var isInstalling = false
+
+    func begin() -> Bool {
+        guard !isInstalling else { return false }
+        isInstalling = true
+        return true
+    }
+
+    func finish() {
+        isInstalling = false
     }
 }
 
@@ -246,6 +310,15 @@ enum DebShareArchive {
         func cleanup() {
             try? FileManager.default.removeItem(at: directory)
         }
+    }
+
+    static func stage(package: DebPackage) async throws -> PreparedArchive {
+        let staged = try await DebInstaller.stageArchives([package])
+        guard let path = staged.paths.first else {
+            staged.cleanup()
+            throw DebInstaller.Error.noPackages
+        }
+        return PreparedArchive(url: URL(fileURLWithPath: path), directory: staged.directory)
     }
 
     static func make(

@@ -44,9 +44,28 @@ class DatabaseDetailVC: PackageDetailVC<DebPackage> {
     func shareDeb(_ button: UIBarButtonItem) {
         guard let package else { return }
 
-        let activityVC = UIActivityViewController(activityItems: [package.fileURL], applicationActivities: nil)
-        activityVC.popoverPresentationController?.barButtonItem = button
-        present(activityVC, animated: true, completion: nil)
+        button.isEnabled = false
+        Task {
+            do {
+                let staged = try await DebShareArchive.stage(package: package)
+                button.isEnabled = true
+                let filzaURL = URL(string: "filza://view")!
+                let activities = UIApplication.shared.canOpenURL(filzaURL)
+                    ? [FilzaExportActivity(fileURL: staged.url)]
+                    : nil
+                let activityVC = UIActivityViewController(
+                    activityItems: [staged.url],
+                    applicationActivities: activities
+                )
+                activityVC.popoverPresentationController?.barButtonItem = button
+                activityVC.completionWithItemsHandler = { _, _, _, _ in staged.cleanup() }
+                present(activityVC, animated: true)
+            } catch {
+                await FFILogger.shared.log(error.localizedDescription, level: .error)
+                button.isEnabled = true
+                showResult(title: "deb-install-failure-title".localized, message: error.localizedDescription)
+            }
+        }
     }
 
     @objc

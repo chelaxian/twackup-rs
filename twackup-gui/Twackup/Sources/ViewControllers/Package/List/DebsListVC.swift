@@ -126,7 +126,20 @@ final class DebsListVC: SelectablePackageListVC<DebPackage> {
         guard !packages.isEmpty else { return }
 
         if packages.count == 1, let package = packages.first {
-            presentShareSheet(items: [package.fileURL], source: button)
+            button.isEnabled = false
+            Task {
+                do {
+                    let staged = try await DebShareArchive.stage(package: package)
+                    button.isEnabled = true
+                    presentShareSheet(items: [staged.url], source: button) {
+                        staged.cleanup()
+                    }
+                } catch {
+                    await FFILogger.shared.log(error.localizedDescription, level: .error)
+                    button.isEnabled = true
+                    showShareError(error.localizedDescription)
+                }
+            }
             return
         }
 
@@ -239,7 +252,7 @@ final class DebsListVC: SelectablePackageListVC<DebPackage> {
     }
 }
 
-private final class FilzaExportActivity: UIActivity {
+final class FilzaExportActivity: UIActivity, @unchecked Sendable {
     private let fileURL: URL
 
     init(fileURL: URL) {
@@ -290,9 +303,10 @@ private final class FilzaExportActivity: UIActivity {
                 return
             }
 
-            activityDidFinish(true)
-            Task { @MainActor in
-                UIApplication.shared.open(filzaURL)
+            Task { @MainActor [weak self] in
+                UIApplication.shared.open(filzaURL) { opened in
+                    self?.activityDidFinish(opened)
+                }
             }
         } catch {
             activityDidFinish(false)
