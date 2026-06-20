@@ -236,7 +236,7 @@ enum DebInstaller {
         guard actionStatus == 0 else { throw Error.spawnFailed(actionStatus, executable) }
 
         var pid = pid_t()
-        var argv = arguments.map(strdup) + [nil]
+        var argv: [UnsafeMutablePointer<CChar>?] = arguments.map { strdup($0) } + [nil]
         var env: [UnsafeMutablePointer<CChar>?] = [
             strdup("PATH=\(bootstrapPath("/usr/bin")):\(bootstrapPath("/bin")):/usr/bin:/bin"),
             strdup("HOME=/var/mobile"),
