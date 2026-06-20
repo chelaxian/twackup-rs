@@ -16,6 +16,7 @@ enum DebInstaller {
         case failedWithOutput(Int32, String)
         case spawnFailed(Int32, String)
         case waitFailed(Int32)
+        case timedOut(String)
         case installInProgress
 
         var errorDescription: String? {
@@ -32,6 +33,8 @@ enum DebInstaller {
                 "failed to launch \(path): \(String(cString: strerror(status)))"
             case let .waitFailed(status):
                 "failed to wait for dpkg: \(String(cString: strerror(status)))"
+            case let .timedOut(path):
+                "dpkg install timed out while running \(path)"
             case .installInProgress:
                 "Package installation is already in progress"
             }
@@ -184,16 +187,16 @@ enum DebInstaller {
             let shellPath = bootstrapPath("/usr/bin/dash")
             let sudoPath = bootstrapPath("/usr/bin/sudo")
             let dpkgPath = bootstrapPath("/usr/bin/dpkg")
-            let rootHelperPath = bootstrapPath("/usr/bin/rc-root")
+            let rootHelperPath = firstExecutablePath(["/usr/bin/rc-root", bootstrapPath("/usr/bin/rc-root")])
             let quotedPaths = paths.map(shellQuote).joined(separator: " ")
             let executable: String
             let arguments: [String]
             if getuid() == 0 {
                 executable = dpkgPath
                 arguments = [dpkgPath, "-i"] + paths
-            } else if FileManager.default.isExecutableFile(atPath: rootHelperPath) {
+            } else if let rootHelperPath {
                 executable = rootHelperPath
-                arguments = [rootHelperPath, dpkgPath, "-i"] + paths
+                arguments = [rootHelperPath, "/usr/bin/dpkg", "-i"] + paths
             } else {
                 let command = "exec \(shellQuote(sudoPath)) -S -p '' \(shellQuote(dpkgPath)) -i \(quotedPaths) < /var/mobile/sudoi.pass"
                 executable = shellPath
@@ -265,13 +268,26 @@ enum DebInstaller {
             throw Error.spawnFailed(spawnStatus, executable)
         }
 
+        let timeout = Date().addingTimeInterval(180)
         var waitStatus: Int32 = 0
-        var waitedPID: pid_t
-        repeat {
-            waitedPID = waitpid(pid, &waitStatus, 0)
-        } while waitedPID == -1 && errno == EINTR
-        guard waitedPID == pid else {
-            throw Error.waitFailed(errno)
+        while true {
+            let waitedPID = waitpid(pid, &waitStatus, WNOHANG)
+            if waitedPID == 0 {
+                if Date() >= timeout {
+                    kill(pid, SIGKILL)
+                    _ = waitpid(pid, &waitStatus, 0)
+                    throw Error.timedOut(executable)
+                }
+                usleep(100_000)
+                continue
+            }
+            if waitedPID == -1 && errno == EINTR {
+                continue
+            }
+            guard waitedPID == pid else {
+                throw Error.waitFailed(errno)
+            }
+            break
         }
 
         if (waitStatus & 0x7f) != 0 {
@@ -289,6 +305,11 @@ enum DebInstaller {
         }
 
         return resolvedJailbreakPath(path)
+    }
+
+    private static func firstExecutablePath(_ paths: [String]) -> String? {
+        let fileManager = FileManager.default
+        return paths.first { !$0.isEmpty && fileManager.isExecutableFile(atPath: $0) }
     }
 
     private static func shellQuote(_ value: String) -> String {
