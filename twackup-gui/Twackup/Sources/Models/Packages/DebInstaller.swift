@@ -184,20 +184,19 @@ enum DebInstaller {
     private static func runDpkgInstall(paths: [String]) async throws -> DpkgResult {
         try await Task.detached(priority: .userInitiated) {
             let logPath = "/tmp/twackup-dpkg-install-\(UUID().uuidString).log"
-            let shellPath = bootstrapPath("/usr/bin/dash")
-            let sudoPath = bootstrapPath("/usr/bin/sudo")
-            let dpkgPath = bootstrapPath("/usr/bin/dpkg")
-            let rootHelperPath = firstExecutablePath(["/usr/bin/rc-root", bootstrapPath("/usr/bin/rc-root")])
-            let quotedPaths = paths.map(shellQuote).joined(separator: " ")
             let executable: String
             let arguments: [String]
-            if getuid() == 0 {
-                executable = dpkgPath
-                arguments = [dpkgPath, "-i"] + paths
-            } else if let rootHelperPath {
-                executable = rootHelperPath
-                arguments = [rootHelperPath, "/usr/bin/dpkg", "-i"] + paths
+            if getuid() == 0, FileManager.default.isExecutableFile(atPath: "/usr/bin/dpkg") {
+                executable = "/usr/bin/dpkg"
+                arguments = [executable, "-i"] + paths
+            } else if FileManager.default.isExecutableFile(atPath: "/usr/bin/rc-root") {
+                executable = "/usr/bin/rc-root"
+                arguments = [executable, "/usr/bin/dpkg", "-i"] + paths
             } else {
+                let shellPath = bootstrapPath("/usr/bin/dash")
+                let sudoPath = bootstrapPath("/usr/bin/sudo")
+                let dpkgPath = bootstrapPath("/usr/bin/dpkg")
+                let quotedPaths = paths.map(shellQuote).joined(separator: " ")
                 let command = "exec \(shellQuote(sudoPath)) -S -p '' \(shellQuote(dpkgPath)) -i \(quotedPaths) < /var/mobile/sudoi.pass"
                 executable = shellPath
                 arguments = [shellPath, "-c", command]
@@ -252,7 +251,7 @@ enum DebInstaller {
         var pid = pid_t()
         var argv: [UnsafeMutablePointer<CChar>?] = arguments.map { strdup($0) } + [nil]
         var env: [UnsafeMutablePointer<CChar>?] = [
-            strdup("PATH=\(bootstrapPath("/usr/bin")):\(bootstrapPath("/bin")):/usr/bin:/bin"),
+            strdup("PATH=/usr/bin:/bin:/var/jb/usr/bin:/var/jb/bin"),
             strdup("HOME=/var/mobile"),
             strdup("USER=mobile"),
             strdup("LOGNAME=mobile"),
@@ -305,11 +304,6 @@ enum DebInstaller {
         }
 
         return resolvedJailbreakPath(path)
-    }
-
-    private static func firstExecutablePath(_ paths: [String]) -> String? {
-        let fileManager = FileManager.default
-        return paths.first { !$0.isEmpty && fileManager.isExecutableFile(atPath: $0) }
     }
 
     private static func shellQuote(_ value: String) -> String {
