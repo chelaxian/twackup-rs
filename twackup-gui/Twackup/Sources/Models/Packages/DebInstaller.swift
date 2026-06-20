@@ -184,17 +184,25 @@ enum DebInstaller {
             let shellPath = bootstrapPath("/usr/bin/dash")
             let sudoPath = bootstrapPath("/usr/bin/sudo")
             let dpkgPath = bootstrapPath("/usr/bin/dpkg")
+            let rootHelperPath = bootstrapPath("/usr/bin/rc-root")
             let quotedPaths = paths.map(shellQuote).joined(separator: " ")
-            let command: String
+            let executable: String
+            let arguments: [String]
             if getuid() == 0 {
-                command = "exec \(shellQuote(dpkgPath)) -i \(quotedPaths)"
+                executable = dpkgPath
+                arguments = [dpkgPath, "-i"] + paths
+            } else if FileManager.default.isExecutableFile(atPath: rootHelperPath) {
+                executable = rootHelperPath
+                arguments = [rootHelperPath, dpkgPath, "-i"] + paths
             } else {
-                command = "exec \(shellQuote(sudoPath)) -S -p '' \(shellQuote(dpkgPath)) -i \(quotedPaths) < /var/mobile/sudoi.pass"
+                let command = "exec \(shellQuote(sudoPath)) -S -p '' \(shellQuote(dpkgPath)) -i \(quotedPaths) < /var/mobile/sudoi.pass"
+                executable = shellPath
+                arguments = [shellPath, "-c", command]
             }
 
             let status = try runProcess(
-                executable: shellPath,
-                arguments: [shellPath, "-c", command],
+                executable: executable,
+                arguments: arguments,
                 standardInput: "/dev/null",
                 logPath: logPath
             )
