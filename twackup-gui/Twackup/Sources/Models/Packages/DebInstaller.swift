@@ -181,18 +181,21 @@ enum DebInstaller {
     private static func runDpkgInstall(paths: [String]) async throws -> DpkgResult {
         try await Task.detached(priority: .userInitiated) {
             let logPath = "/tmp/twackup-dpkg-install-\(UUID().uuidString).log"
+            let shellPath = bootstrapPath("/usr/bin/dash")
             let sudoPath = bootstrapPath("/usr/bin/sudo")
             let dpkgPath = bootstrapPath("/usr/bin/dpkg")
-            let passwordPath = "/var/mobile/sudoi.pass"
-            let useSudo = FileManager.default.isReadableFile(atPath: passwordPath)
-            let executable = useSudo ? sudoPath : dpkgPath
-            var arguments = useSudo ? [sudoPath, "-S", "-p", "", dpkgPath, "-i"] : [dpkgPath, "-i"]
-            arguments.append(contentsOf: paths)
+            let quotedPaths = paths.map(shellQuote).joined(separator: " ")
+            let command: String
+            if getuid() == 0 {
+                command = "exec \(shellQuote(dpkgPath)) -i \(quotedPaths)"
+            } else {
+                command = "exec \(shellQuote(sudoPath)) -S -p '' \(shellQuote(dpkgPath)) -i \(quotedPaths) < /var/mobile/sudoi.pass"
+            }
 
             let status = try runProcess(
-                executable: executable,
-                arguments: arguments,
-                standardInput: useSudo ? passwordPath : "/dev/null",
+                executable: shellPath,
+                arguments: [shellPath, "-c", command],
+                standardInput: "/dev/null",
                 logPath: logPath
             )
             let output = (try? String(contentsOfFile: logPath))?
@@ -278,6 +281,10 @@ enum DebInstaller {
         }
 
         return resolvedJailbreakPath(path)
+    }
+
+    private static func shellQuote(_ value: String) -> String {
+        "'\(value.replacingOccurrences(of: "'", with: "'\\''"))'"
     }
 
 }
