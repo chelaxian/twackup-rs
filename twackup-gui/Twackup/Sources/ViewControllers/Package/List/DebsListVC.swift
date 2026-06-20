@@ -251,8 +251,12 @@ private final class FilzaExportActivity: UIActivity {
         UIActivity.ActivityType("ru.danpashin.twackup.open-in-filza")
     }
 
+    override class var activityCategory: UIActivity.Category {
+        .action
+    }
+
     override var activityTitle: String? {
-        "Filza"
+        "Сохранить в Filza"
     }
 
     override var activityImage: UIImage? {
