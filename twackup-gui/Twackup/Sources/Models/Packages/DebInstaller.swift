@@ -91,7 +91,10 @@ enum DebInstaller {
     ) async throws -> StagedArchives {
         try await Task.detached(priority: .userInitiated) {
             let fileManager = FileManager.default
-            let directory = URL(fileURLWithPath: "/tmp", isDirectory: true)
+            let directory = URL(
+                fileURLWithPath: "/var/mobile/Library/Caches/Twackup/Install",
+                isDirectory: true
+            )
                 .appendingPathComponent("twackup-install-\(UUID().uuidString)", isDirectory: true)
             try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
 
