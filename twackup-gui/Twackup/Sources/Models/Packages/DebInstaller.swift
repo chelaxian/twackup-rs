@@ -168,15 +168,21 @@ enum DebInstaller {
 
     private static func runDpkgInstall(paths: [String]) async throws -> DpkgResult {
         try await Task.detached(priority: .userInitiated) {
-            let logPath = "/tmp/twackup-dpkg-install-\(UUID().uuidString).log"
+            let token = UUID().uuidString
+            let logPath = "/tmp/twackup-dpkg-install-\(token).log"
             let executable: String
             let arguments: [String]
+            let completionPath: String?
             if getuid() == 0, FileManager.default.isExecutableFile(atPath: "/usr/bin/dpkg") {
                 executable = "/usr/bin/dpkg"
                 arguments = [executable, "-i"] + paths
+                completionPath = nil
             } else if FileManager.default.isExecutableFile(atPath: "/usr/bin/rc-root") {
                 executable = "/usr/bin/rc-root"
-                arguments = [executable, "/usr/bin/dpkg", "-i"] + paths
+                completionPath = "/tmp/twackup-dpkg-install-\(token).status"
+                let quotedPaths = paths.map(shellQuote).joined(separator: " ")
+                let command = "/usr/bin/dpkg -i \(quotedPaths); status=$?; printf '%s' \"$status\" > \(shellQuote(completionPath!)); exit $status"
+                arguments = [executable, "/usr/bin/dash", "-c", command]
             } else {
                 let shellPath = bootstrapPath("/usr/bin/dash")
                 let sudoPath = bootstrapPath("/usr/bin/sudo")
@@ -185,20 +191,40 @@ enum DebInstaller {
                 let command = "exec \(shellQuote(sudoPath)) -S -p '' \(shellQuote(dpkgPath)) -i \(quotedPaths) < /var/mobile/sudoi.pass"
                 executable = shellPath
                 arguments = [shellPath, "-c", command]
+                completionPath = nil
             }
 
-            let status = try runProcess(
+            let launcherStatus = try runProcess(
                 executable: executable,
                 arguments: arguments,
                 standardInput: "/dev/null",
                 logPath: logPath
             )
+            let status: Int32
+            if let completionPath {
+                status = try waitForCompletionMarker(at: completionPath)
+            } else {
+                status = launcherStatus
+            }
             let output = (try? String(contentsOfFile: logPath))?
                 .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             try? FileManager.default.removeItem(atPath: logPath)
 
             return DpkgResult(status: status, output: output)
         }.value
+    }
+
+    private static func waitForCompletionMarker(at path: String) throws -> Int32 {
+        let timeout = Date().addingTimeInterval(180)
+        while Date() < timeout {
+            if let value = try? String(contentsOfFile: path),
+               let status = Int32(value.trimmingCharacters(in: .whitespacesAndNewlines)) {
+                try? FileManager.default.removeItem(atPath: path)
+                return status
+            }
+            usleep(100_000)
+        }
+        throw Error.timedOut("/usr/bin/dpkg")
     }
 
     private static func runProcess(
