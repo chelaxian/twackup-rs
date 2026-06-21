@@ -193,7 +193,8 @@ enum DebInstaller {
                 executable = "/usr/bin/dpkg"
                 arguments = [executable, "-i"] + paths
                 completionPath = nil
-            } else if FileManager.default.isExecutableFile(atPath: "/usr/bin/sudo"),
+            } else if !FileManager.default.isExecutableFile(atPath: "/usr/bin/rc-root"),
+                      FileManager.default.isExecutableFile(atPath: "/usr/bin/sudo"),
                       FileManager.default.isExecutableFile(atPath: "/usr/bin/dash"),
                       FileManager.default.isExecutableFile(atPath: "/usr/bin/dpkg"),
                       FileManager.default.isReadableFile(atPath: "/var/mobile/sudoi.pass") {
