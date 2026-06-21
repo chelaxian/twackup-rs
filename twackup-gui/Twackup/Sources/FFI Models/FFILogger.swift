@@ -88,20 +88,19 @@ actor FFILogger {
         tw_enable_logging(funcs, .init(UInt32(level.rawValue)))
     }
 
-    func log(message: Message, level: Level) {
-        subscribers
+    func log(message: Message, level: Level) async {
+        let currentSubscribers = subscribers
             // Since subscriber can only be added via addSubscriber() it must conform to FFILoggerSubscriber
             // So force casting is safe here
             .map { $0 as! any FFILoggerSubscriber } // swiftlint:disable:this force_cast
-            .forEach { subscriber in
-                Task {
-                    await subscriber.log(message: message, level: level)
-                }
-            }
+
+        for subscriber in currentSubscribers {
+            await subscriber.log(message: message, level: level)
+        }
     }
 
-    func log(_ text: String, level: Level = .info) {
-        log(message: Message(text: text), level: level)
+    func log(_ text: String, level: Level = .info) async {
+        await log(message: Message(text: text), level: level)
     }
 
     func addSubscriber<S: FFILoggerSubscriber>(_ subscriber: S) {
@@ -112,15 +111,14 @@ actor FFILogger {
         subscribers.remove(subscriber)
     }
 
-    private func flush() {
-        subscribers
+    private func flush() async {
+        let currentSubscribers = subscribers
             // Since subscriber can only be added via addSubscriber() it must conform to FFILoggerSubscriber
             // So force casting is safe here
             .map { $0 as! any FFILoggerSubscriber } // swiftlint:disable:this force_cast
-            .forEach { subscriber in
-                Task {
-                    await subscriber.flush()
-                }
-            }
+
+        for subscriber in currentSubscribers {
+            await subscriber.flush()
+        }
     }
 }

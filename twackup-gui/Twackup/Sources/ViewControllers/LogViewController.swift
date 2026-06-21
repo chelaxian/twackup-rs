@@ -16,6 +16,10 @@ final class LogViewController: UIViewController, FFILoggerSubscriber, Scrollable
     let currentText = NSMutableAttributedString()
 
     private var wantsToScrollBottom: Bool = false
+    private var renderTask: Task<Void, Never>?
+
+    private static let logHighWaterLength = 250_000
+    private static let logTargetLength = 180_000
 
     private(set) lazy var logView: StyledTextView = {
         let view = StyledTextView()
@@ -49,6 +53,7 @@ final class LogViewController: UIViewController, FFILoggerSubscriber, Scrollable
     }
 
     deinit {
+        renderTask?.cancel()
         Task { [self] in
             await FFILogger.shared.removeSubscriber(self)
         }
@@ -97,6 +102,35 @@ final class LogViewController: UIViewController, FFILoggerSubscriber, Scrollable
         scrollView.contentSize = logView.bounds.size
     }
 
+    private func scheduleRender() {
+        guard renderTask == nil else { return }
+
+        renderTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 200_000_000)
+            guard let self else { return }
+
+            self.renderTask = nil
+            guard !Task.isCancelled, self.isViewLoaded, self.view.window != nil else { return }
+
+            self.renderLog()
+            self.scrollToBottomIfNeeded()
+        }
+    }
+
+    private func trimLogIfNeeded() {
+        guard currentText.length > Self.logHighWaterLength else { return }
+
+        let minimumRemoval = currentText.length - Self.logTargetLength
+        let searchLength = min(4_096, currentText.length - minimumRemoval)
+        let searchRange = NSRange(location: minimumRemoval, length: searchLength)
+        let newlineRange = (currentText.string as NSString).range(of: "\n", range: searchRange)
+        let removalLength = newlineRange.location == NSNotFound
+            ? minimumRemoval
+            : NSMaxRange(newlineRange)
+
+        currentText.deleteCharacters(in: NSRange(location: 0, length: removalLength))
+    }
+
     private func scrollToBottomIfNeeded(animated: Bool = false) {
         guard wantsToScrollBottom else { return }
         wantsToScrollBottom = false
@@ -120,6 +154,8 @@ final class LogViewController: UIViewController, FFILoggerSubscriber, Scrollable
 
     @objc
     func actionClearLog() {
+        renderTask?.cancel()
+        renderTask = nil
         currentText.setAttributedString(NSAttributedString())
         renderLog()
 
@@ -149,11 +185,11 @@ final class LogViewController: UIViewController, FFILoggerSubscriber, Scrollable
             ]))
 
             currentText.append(NSAttributedString(string: "\n"))
+            trimLogIfNeeded()
 
             wantsToScrollBottom = true
             if isViewLoaded, view.window != nil {
-                renderLog()
-                scrollToBottomIfNeeded()
+                scheduleRender()
             }
         }
     }
