@@ -179,10 +179,21 @@ enum DebInstaller {
                 completionPath = nil
             } else if FileManager.default.isExecutableFile(atPath: "/usr/bin/rc-root") {
                 executable = "/usr/bin/rc-root"
-                completionPath = "/tmp/twackup-dpkg-install-\(token).status"
+                let stagingDirectory = URL(fileURLWithPath: paths[0]).deletingLastPathComponent().path
+                completionPath = "\(stagingDirectory)/.twackup-install.status"
+                let scriptPath = "\(stagingDirectory)/.twackup-install.sh"
                 let quotedPaths = paths.map(shellQuote).joined(separator: " ")
-                let command = "/usr/bin/dpkg -i \(quotedPaths); status=$?; printf '%s' \"$status\" > \(shellQuote(completionPath!)); exit $status"
-                arguments = [executable, "/usr/bin/dash", "-c", command]
+                let script = """
+                /usr/bin/dpkg -i \(quotedPaths)
+                status=$?
+                printf '%s' "$status" > \(shellQuote(completionPath!))
+                exit $status
+                """
+                try script.write(toFile: scriptPath, atomically: true, encoding: .utf8)
+                guard chmod(scriptPath, S_IRUSR | S_IWUSR | S_IXUSR) == 0 else {
+                    throw Error.spawnFailed(errno, scriptPath)
+                }
+                arguments = [executable, "/usr/bin/dash", scriptPath]
             } else {
                 let shellPath = bootstrapPath("/usr/bin/dash")
                 let sudoPath = bootstrapPath("/usr/bin/sudo")
@@ -203,6 +214,11 @@ enum DebInstaller {
             let status: Int32
             if let completionPath {
                 status = try waitForCompletionMarker(at: completionPath)
+                let scriptPath = URL(fileURLWithPath: completionPath)
+                    .deletingLastPathComponent()
+                    .appendingPathComponent(".twackup-install.sh")
+                    .path
+                try? FileManager.default.removeItem(atPath: scriptPath)
             } else {
                 status = launcherStatus
             }
