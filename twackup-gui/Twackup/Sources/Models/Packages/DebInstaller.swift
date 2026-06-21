@@ -94,8 +94,7 @@ enum DebInstaller {
             isDirectory: true
         )
         let stagingRoot: URL
-        if FileManager.default.isExecutableFile(atPath: "/usr/bin/rc-root"),
-           Bundle.main.bundlePath.contains("/.jbroot-") {
+        if Bundle.main.bundlePath.contains("/.jbroot-") {
             let jailbreakRoot = Bundle.main.bundleURL
                 .deletingLastPathComponent()
                 .deletingLastPathComponent()
