@@ -177,6 +177,15 @@ enum DebInstaller {
                 executable = "/usr/bin/dpkg"
                 arguments = [executable, "-i"] + paths
                 completionPath = nil
+            } else if FileManager.default.isExecutableFile(atPath: "/usr/bin/sudo"),
+                      FileManager.default.isExecutableFile(atPath: "/usr/bin/dash"),
+                      FileManager.default.isExecutableFile(atPath: "/usr/bin/dpkg"),
+                      FileManager.default.isReadableFile(atPath: "/var/mobile/sudoi.pass") {
+                let quotedPaths = paths.map(shellQuote).joined(separator: " ")
+                let command = "exec /usr/bin/sudo -S -p '' /usr/bin/dpkg -i \(quotedPaths) < /var/mobile/sudoi.pass"
+                executable = "/usr/bin/dash"
+                arguments = [executable, "-c", command]
+                completionPath = nil
             } else if FileManager.default.isExecutableFile(atPath: "/usr/bin/rc-root") {
                 executable = "/usr/bin/rc-root"
                 let stagingDirectory = URL(fileURLWithPath: paths[0]).deletingLastPathComponent().path
