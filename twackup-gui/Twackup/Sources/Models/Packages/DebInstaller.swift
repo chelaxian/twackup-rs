@@ -249,6 +249,19 @@ enum DebInstaller {
                 completionPath = nil
             }
 
+            let warmupPID: pid_t?
+            if executable == physicalRcRoot {
+                warmupPID = try spawnRcRootWarmup(executable: physicalRcRoot)
+                usleep(1_000_000)
+            } else {
+                warmupPID = nil
+            }
+            defer {
+                if let warmupPID {
+                    stopRcRootWarmup(pid: warmupPID)
+                }
+            }
+
             let launcherStatus = try runProcess(
                 executable: executable,
                 arguments: arguments,
@@ -285,6 +298,66 @@ enum DebInstaller {
             usleep(100_000)
         }
         throw Error.timedOut("/usr/bin/dpkg")
+    }
+
+    private static func spawnRcRootWarmup(executable: String) throws -> pid_t {
+        let nullFD = open("/dev/null", O_RDWR)
+        guard nullFD >= 0 else {
+            throw Error.spawnFailed(errno, "/dev/null")
+        }
+        defer { close(nullFD) }
+
+        var fileActions: posix_spawn_file_actions_t?
+        var actionStatus = posix_spawn_file_actions_init(&fileActions)
+        guard actionStatus == 0 else {
+            throw Error.spawnFailed(actionStatus, executable)
+        }
+        defer { posix_spawn_file_actions_destroy(&fileActions) }
+
+        for descriptor in [STDIN_FILENO, STDOUT_FILENO, STDERR_FILENO] {
+            actionStatus = posix_spawn_file_actions_adddup2(&fileActions, nullFD, descriptor)
+            guard actionStatus == 0 else {
+                throw Error.spawnFailed(actionStatus, executable)
+            }
+        }
+
+        var pid = pid_t()
+        var argv: [UnsafeMutablePointer<CChar>?] = [
+            strdup(executable),
+            strdup("/usr/bin/true"),
+            nil
+        ]
+        var env: [UnsafeMutablePointer<CChar>?] = [
+            strdup("PATH=/usr/bin:/bin"),
+            strdup("HOME=/var/mobile"),
+            strdup("USER=mobile"),
+            strdup("LOGNAME=mobile"),
+            nil
+        ]
+        defer {
+            argv.compactMap { $0 }.forEach { free($0) }
+            env.compactMap { $0 }.forEach { free($0) }
+        }
+
+        let spawnStatus = posix_spawn(&pid, executable, &fileActions, nil, &argv, &env)
+        guard spawnStatus == 0 else {
+            throw Error.spawnFailed(spawnStatus, executable)
+        }
+        _ = setpgid(pid, pid)
+        return pid
+    }
+
+    private static func stopRcRootWarmup(pid: pid_t) {
+        _ = kill(-pid, SIGTERM)
+        _ = kill(pid, SIGTERM)
+        usleep(100_000)
+
+        var status: Int32 = 0
+        if waitpid(pid, &status, WNOHANG) == 0 {
+            _ = kill(-pid, SIGKILL)
+            _ = kill(pid, SIGKILL)
+            _ = waitpid(pid, &status, 0)
+        }
     }
 
     private static func runProcess(
