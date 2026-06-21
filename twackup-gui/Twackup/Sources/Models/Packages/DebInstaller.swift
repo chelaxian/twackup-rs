@@ -17,7 +17,6 @@ enum DebInstaller {
         case spawnFailed(Int32, String)
         case waitFailed(Int32)
         case timedOut(String)
-        case installInProgress
 
         var errorDescription: String? {
             switch self {
@@ -35,30 +34,16 @@ enum DebInstaller {
                 "failed to wait for dpkg: \(String(cString: strerror(status)))"
             case let .timedOut(path):
                 "dpkg install timed out while running \(path)"
-            case .installInProgress:
-                "Package installation is already in progress"
             }
         }
     }
-
-    private static let installGate = InstallGate()
 
     static func install(packages: [DebPackage]) async throws {
         guard !packages.isEmpty else {
             throw Error.noPackages
         }
 
-        guard await installGate.begin() else {
-            throw Error.installInProgress
-        }
-
-        do {
-            try await performInstall(packages: packages)
-            await installGate.finish()
-        } catch {
-            await installGate.finish()
-            throw error
-        }
+        try await performInstall(packages: packages)
     }
 
     private static func performInstall(packages: [DebPackage]) async throws {
@@ -316,20 +301,6 @@ enum DebInstaller {
         }
     }
 
-}
-
-private actor InstallGate {
-    private var isInstalling = false
-
-    func begin() -> Bool {
-        guard !isInstalling else { return false }
-        isInstalling = true
-        return true
-    }
-
-    func finish() {
-        isInstalling = false
-    }
 }
 
 
