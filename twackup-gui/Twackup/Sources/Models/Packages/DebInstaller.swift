@@ -89,18 +89,25 @@ enum DebInstaller {
         _ packages: [DebPackage],
         progress: (@Sendable (Double) -> Void)? = nil
     ) async throws -> StagedArchives {
-        let logicalRoot = "/var/mobile/Library/Caches/Twackup/Install"
-        let stagingRoot: String
-        if FileManager.default.isExecutableFile(atPath: "/usr/bin/rc-root") {
-            let resolvedRoot = jbRootPath(logicalRoot)
-            stagingRoot = resolvedRoot.isEmpty ? logicalRoot : resolvedRoot
+        let logicalRoot = URL(
+            fileURLWithPath: "/var/mobile/Library/Caches/Twackup/Install",
+            isDirectory: true
+        )
+        let stagingRoot: URL
+        if FileManager.default.isExecutableFile(atPath: "/usr/bin/rc-root"),
+           Bundle.main.bundlePath.contains("/.jbroot-") {
+            let jailbreakRoot = Bundle.main.bundleURL
+                .deletingLastPathComponent()
+                .deletingLastPathComponent()
+            stagingRoot = jailbreakRoot
+                .appendingPathComponent("var/mobile/Library/Caches/Twackup/Install", isDirectory: true)
         } else {
             stagingRoot = logicalRoot
         }
 
         return try await Task.detached(priority: .userInitiated) {
             let fileManager = FileManager.default
-            let directory = URL(fileURLWithPath: stagingRoot, isDirectory: true)
+            let directory = stagingRoot
                 .appendingPathComponent("twackup-install-\(UUID().uuidString)", isDirectory: true)
             try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
 
