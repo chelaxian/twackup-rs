@@ -183,7 +183,14 @@ enum DebInstaller {
     }
 
     private static func runDpkgInstall(paths: [String]) async throws -> DpkgResult {
-        try await Task.detached(priority: .userInitiated) {
+        let jailbreakRoot = Bundle.main.bundleURL
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let physicalRcRoot = jailbreakRoot
+            .appendingPathComponent("usr/bin/rc-root")
+            .path
+
+        return try await Task.detached(priority: .userInitiated) {
             let token = UUID().uuidString
             let logPath = "/tmp/twackup-dpkg-install-\(token).log"
             let executable: String
@@ -193,7 +200,7 @@ enum DebInstaller {
                 executable = "/usr/bin/dpkg"
                 arguments = [executable, "-i"] + paths
                 completionPath = nil
-            } else if !FileManager.default.isExecutableFile(atPath: "/usr/bin/rc-root"),
+            } else if !FileManager.default.isExecutableFile(atPath: physicalRcRoot),
                       FileManager.default.isExecutableFile(atPath: "/usr/bin/sudo"),
                       FileManager.default.isExecutableFile(atPath: "/usr/bin/dash"),
                       FileManager.default.isExecutableFile(atPath: "/usr/bin/dpkg"),
@@ -215,8 +222,8 @@ enum DebInstaller {
                 let command = "exec /usr/bin/sudo -S -p '' /usr/bin/dash \(shellQuote(scriptPath)) < /var/mobile/sudoi.pass"
                 executable = "/usr/bin/dash"
                 arguments = [executable, "-c", command]
-            } else if FileManager.default.isExecutableFile(atPath: "/usr/bin/rc-root") {
-                executable = "/usr/bin/rc-root"
+            } else if FileManager.default.isExecutableFile(atPath: physicalRcRoot) {
+                executable = physicalRcRoot
                 let stagingDirectory = URL(fileURLWithPath: paths[0]).deletingLastPathComponent().path
                 completionPath = "\(stagingDirectory)/.twackup-install.status"
                 let scriptPath = "\(stagingDirectory)/.twackup-install.sh"
