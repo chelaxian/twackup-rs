@@ -98,7 +98,7 @@ enum DebInstaller {
             stagingRoot = logicalRoot
         }
 
-        try await Task.detached(priority: .userInitiated) {
+        return try await Task.detached(priority: .userInitiated) {
             let fileManager = FileManager.default
             let directory = URL(fileURLWithPath: stagingRoot, isDirectory: true)
                 .appendingPathComponent("twackup-install-\(UUID().uuidString)", isDirectory: true)
