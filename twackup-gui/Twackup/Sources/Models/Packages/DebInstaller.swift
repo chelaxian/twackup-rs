@@ -314,6 +314,25 @@ enum DebInstaller {
         }
         defer { posix_spawn_file_actions_destroy(&fileActions) }
 
+        var spawnAttributes: posix_spawnattr_t?
+        actionStatus = posix_spawnattr_init(&spawnAttributes)
+        guard actionStatus == 0 else {
+            throw Error.spawnFailed(actionStatus, executable)
+        }
+        defer { posix_spawnattr_destroy(&spawnAttributes) }
+
+        actionStatus = posix_spawnattr_setflags(
+            &spawnAttributes,
+            Int16(POSIX_SPAWN_SETPGROUP)
+        )
+        guard actionStatus == 0 else {
+            throw Error.spawnFailed(actionStatus, executable)
+        }
+        actionStatus = posix_spawnattr_setpgroup(&spawnAttributes, 0)
+        guard actionStatus == 0 else {
+            throw Error.spawnFailed(actionStatus, executable)
+        }
+
         for descriptor in [STDIN_FILENO, STDOUT_FILENO, STDERR_FILENO] {
             actionStatus = posix_spawn_file_actions_adddup2(&fileActions, nullFD, descriptor)
             guard actionStatus == 0 else {
@@ -339,11 +358,17 @@ enum DebInstaller {
             env.compactMap { $0 }.forEach { free($0) }
         }
 
-        let spawnStatus = posix_spawn(&pid, executable, &fileActions, nil, &argv, &env)
+        let spawnStatus = posix_spawn(
+            &pid,
+            executable,
+            &fileActions,
+            &spawnAttributes,
+            &argv,
+            &env
+        )
         guard spawnStatus == 0 else {
             throw Error.spawnFailed(spawnStatus, executable)
         }
-        _ = setpgid(pid, pid)
         return pid
     }
 
@@ -353,11 +378,9 @@ enum DebInstaller {
         usleep(100_000)
 
         var status: Int32 = 0
-        if waitpid(pid, &status, WNOHANG) == 0 {
-            _ = kill(-pid, SIGKILL)
-            _ = kill(pid, SIGKILL)
-            _ = waitpid(pid, &status, 0)
-        }
+        _ = kill(-pid, SIGKILL)
+        _ = kill(pid, SIGKILL)
+        _ = waitpid(pid, &status, WNOHANG)
     }
 
     private static func runProcess(
