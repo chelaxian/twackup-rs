@@ -97,11 +97,25 @@ final class LogViewController: UIViewController, FFILoggerSubscriber, Scrollable
         scrollView.contentSize = logView.bounds.size
     }
 
-    private func scrollToBottomIfNeeded() {
-        if wantsToScrollBottom {
-            scrollView.contentOffset = scrollView.maximumContentOffset
-            wantsToScrollBottom = false
+    private func scrollToBottomIfNeeded(animated: Bool = false) {
+        guard wantsToScrollBottom else { return }
+        wantsToScrollBottom = false
+
+        let inset = scrollView.adjustedContentInset
+        let minimumOffset = CGPoint(x: -inset.left, y: -inset.top)
+        guard currentText.length > 0, scrollView.contentSize.height > 0 else {
+            scrollView.setContentOffset(minimumOffset, animated: false)
+            return
         }
+
+        let maximumY = max(
+            minimumOffset.y,
+            scrollView.contentSize.height - scrollView.bounds.height + inset.bottom
+        )
+        scrollView.setContentOffset(
+            CGPoint(x: minimumOffset.x, y: maximumY),
+            animated: animated
+        )
     }
 
     @objc
@@ -151,6 +165,6 @@ final class LogViewController: UIViewController, FFILoggerSubscriber, Scrollable
 
     func scrollToInitialPosition(animated: Bool) {
         wantsToScrollBottom = true
-        scrollToBottomIfNeeded()
+        scrollToBottomIfNeeded(animated: animated)
     }
 }
