@@ -251,8 +251,8 @@ impl<'a, T: Progress> Worker<'a, T> {
             .strip_prefix(Path::new("/"))
             .unwrap_or(logical_path);
         let physical_path = self.preferences.source_root.join(relative);
-        if let Ok(metadata) = fs::symlink_metadata(&physical_path) {
-            if self.preferences.follow_symlinks && metadata.file_type().is_symlink() {
+        if fs::symlink_metadata(&physical_path).is_ok() {
+            if self.preferences.follow_symlinks && fs::read_link(&physical_path).is_ok() {
                 self.resolve_physical_symlink(physical_path)
             } else {
                 physical_path
@@ -266,12 +266,6 @@ impl<'a, T: Progress> Worker<'a, T> {
 
     fn resolve_physical_symlink(&self, mut path: PathBuf) -> PathBuf {
         for _ in 0..16 {
-            let Ok(metadata) = fs::symlink_metadata(&path) else {
-                break;
-            };
-            if !metadata.file_type().is_symlink() {
-                break;
-            }
             let Ok(target) = fs::read_link(&path) else {
                 break;
             };

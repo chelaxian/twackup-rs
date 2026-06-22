@@ -2405,7 +2405,7 @@ dependencies = [
 
 [[package]]
 name = "twackup"
-version = "2.0.26"
+version = "2.0.27"
 dependencies = [
  "ar",
  "bzip2",
@@ -2430,7 +2430,7 @@ dependencies = [
 
 [[package]]
 name = "twackup-cli"
-version = "2.0.26"
+version = "2.0.27"
 dependencies = [
  "async-trait",
  "chrono",
