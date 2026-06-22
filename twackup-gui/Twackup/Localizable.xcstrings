@@ -1014,6 +1014,41 @@
         }
       }
     },
+    "settings-respring-button" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Respring" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Респринг" } }
+      }
+    },
+    "settings-respring-confirm-title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Respring device?" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Выполнить респринг?" } }
+      }
+    },
+    "settings-respring-confirm-message" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "SpringBoard will restart and Twackup will close." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "SpringBoard перезапустится, а Twackup закроется." } }
+      }
+    },
+    "settings-respring-confirm-button" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Respring" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Респринг" } }
+      }
+    },
+    "settings-respring-error-title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Respring failed" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Ошибка респринга" } }
+      }
+    },
     "settings-app-version-label" : {
       "localizations" : {
         "en" : {

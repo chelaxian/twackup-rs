@@ -85,6 +85,20 @@ enum DebInstaller {
         let output: String
     }
 
+    private actor RcRootWarmup {
+        static let shared = RcRootWarmup()
+        private var isPrepared = false
+
+        func prepare(executable: String) throws {
+            guard !isPrepared else { return }
+
+            let pid = try DebInstaller.spawnRcRootWarmup(executable: executable)
+            usleep(1_000_000)
+            DebInstaller.stopRcRootWarmup(pid: pid)
+            isPrepared = true
+        }
+    }
+
     static func stageArchives(
         _ packages: [DebPackage],
         progress: (@Sendable (Double) -> Void)? = nil
@@ -249,17 +263,8 @@ enum DebInstaller {
                 completionPath = nil
             }
 
-            let warmupPID: pid_t?
             if executable == physicalRcRoot {
-                warmupPID = try spawnRcRootWarmup(executable: physicalRcRoot)
-                usleep(1_000_000)
-            } else {
-                warmupPID = nil
-            }
-            defer {
-                if let warmupPID {
-                    stopRcRootWarmup(pid: warmupPID)
-                }
+                try await RcRootWarmup.shared.prepare(executable: physicalRcRoot)
             }
 
             let launcherStatus = try runProcess(
@@ -514,10 +519,7 @@ enum DebShareArchive {
         packages: [DebPackage],
         progress: @escaping @Sendable (Double) -> Void
     ) async throws -> PreparedArchive {
-        let staged = try await DebInstaller.stageArchives(packages) { value in
-            progress(value * 0.34)
-        }
-        defer { staged.cleanup() }
+        let files = packages.map(\.fileURL)
 
         return try await Task.detached(priority: .userInitiated) {
             let directory = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
@@ -533,10 +535,9 @@ enum DebShareArchive {
             do {
                 try StoredZipArchive.create(
                     at: archiveURL,
-                    files: staged.paths.map { URL(fileURLWithPath: $0) }
-                ) { value in
-                    progress(0.34 + value * 0.66)
-                }
+                    files: files,
+                    progress: progress
+                )
                 progress(1.0)
                 return PreparedArchive(url: archiveURL, directory: directory)
             } catch {
@@ -568,7 +569,7 @@ private enum StoredZipArchive {
             let attributes = try FileManager.default.attributesOfItem(atPath: file.path)
             return (attributes[.size] as? NSNumber)?.uint64Value ?? 0
         }
-        let totalWork = max(fileSizes.reduce(UInt64(0), +) * 2, 1)
+        let totalWork = max(fileSizes.reduce(UInt64(0), +), 1)
         var completedWork = UInt64(0)
 
         let output = try FileHandle(forWritingTo: destination)
@@ -588,37 +589,46 @@ private enum StoredZipArchive {
                 throw DebInstaller.Error.missingArchive("\(file.lastPathComponent): filename is too long")
             }
 
-            let crc = try crc32(of: file) { count in
-                completedWork += UInt64(count)
-                progress(min(Double(completedWork) / Double(totalWork), 1.0))
-            }
             let localOffset = offset
             var header = Data()
             header.appendLE(UInt32(0x04034b50))
             header.appendLE(UInt16(20))
-            header.appendLE(UInt16(0x0800))
+            header.appendLE(UInt16(0x0808))
             header.appendLE(UInt16(0))
             header.appendLE(UInt16(0))
             header.appendLE(UInt16(0))
-            header.appendLE(crc)
-            header.appendLE(UInt32(fileSize))
-            header.appendLE(UInt32(fileSize))
+            header.appendLE(UInt32(0))
+            header.appendLE(UInt32(0))
+            header.appendLE(UInt32(0))
             header.appendLE(UInt16(name.count))
             header.appendLE(UInt16(0))
             header.append(name)
             try output.write(contentsOf: header)
             offset += UInt32(header.count)
 
+            var crc = UInt32.max
             do {
                 let input = try FileHandle(forReadingFrom: file)
                 defer { try? input.close() }
                 while let data = try input.read(upToCount: 1024 * 1024), !data.isEmpty {
                     try output.write(contentsOf: data)
+                    for byte in data {
+                        crc = table[Int((crc ^ UInt32(byte)) & 0xff)] ^ (crc >> 8)
+                    }
                     offset += UInt32(data.count)
                     completedWork += UInt64(data.count)
                     progress(min(Double(completedWork) / Double(totalWork), 1.0))
                 }
             }
+
+            crc ^= UInt32.max
+            var descriptor = Data()
+            descriptor.appendLE(UInt32(0x08074b50))
+            descriptor.appendLE(crc)
+            descriptor.appendLE(UInt32(fileSize))
+            descriptor.appendLE(UInt32(fileSize))
+            try output.write(contentsOf: descriptor)
+            offset += UInt32(descriptor.count)
 
             entries.append(Entry(name: name, crc32: crc, size: UInt32(fileSize), offset: localOffset))
         }
@@ -629,7 +639,7 @@ private enum StoredZipArchive {
             header.appendLE(UInt32(0x02014b50))
             header.appendLE(UInt16(20))
             header.appendLE(UInt16(20))
-            header.appendLE(UInt16(0x0800))
+            header.appendLE(UInt16(0x0808))
             header.appendLE(UInt16(0))
             header.appendLE(UInt16(0))
             header.appendLE(UInt16(0))
@@ -663,20 +673,6 @@ private enum StoredZipArchive {
         end.appendLE(centralOffset)
         end.appendLE(UInt16(0))
         try output.write(contentsOf: end)
-    }
-
-    private static func crc32(of file: URL, progress: (Int) -> Void) throws -> UInt32 {
-        let input = try FileHandle(forReadingFrom: file)
-        defer { try? input.close() }
-
-        var value = UInt32.max
-        while let data = try input.read(upToCount: 1024 * 1024), !data.isEmpty {
-            for byte in data {
-                value = table[Int((value ^ UInt32(byte)) & 0xff)] ^ (value >> 8)
-            }
-            progress(data.count)
-        }
-        return value ^ UInt32.max
     }
 
     private static let table: [UInt32] = (0..<256).map { index in

@@ -98,6 +98,8 @@ pub struct Preferences {
     pub follow_symlinks: bool,
     /// Dpkg dir paths
     paths: Paths,
+    /// Physical filesystem root containing package payload files.
+    source_root: PathBuf,
     /// Directory to which final deb should be moved
     destination_dir: PathBuf,
 }
@@ -120,13 +122,31 @@ impl Preferences {
     /// - `destination_dir` - Directory to which final deb package should be placed
     #[inline]
     pub fn new<A: Into<Paths>, D: AsRef<Path>>(admin_dir: A, destination_dir: D) -> Self {
+        let paths = admin_dir.into();
+        let source_root = package_source_root(paths.as_ref());
         Self {
             remove_deb: false,
             compression: Compression::default(),
             follow_symlinks: false,
-            paths: admin_dir.into(),
+            paths,
+            source_root,
             destination_dir: destination_dir.as_ref().to_path_buf(),
         }
+    }
+}
+
+fn package_source_root(admin_dir: &Path) -> PathBuf {
+    let mut root = admin_dir.to_path_buf();
+    for expected in ["dpkg", "lib", "var"] {
+        if root.file_name().and_then(|name| name.to_str()) != Some(expected) {
+            return PathBuf::from("/");
+        }
+        root.pop();
+    }
+    if root.as_os_str().is_empty() {
+        PathBuf::from("/")
+    } else {
+        root
     }
 }
 
@@ -191,16 +211,48 @@ impl<'a, T: Progress> Worker<'a, T> {
             .package
             .get_installed_files(self.preferences.paths.as_ref())?;
 
+        let mut failures = 0usize;
+        let mut failure_samples = Vec::with_capacity(3);
         for file in files {
             // Remove root slash because tars don't contain absolute paths
             let name = file.trim_start_matches('/');
-            let res = archiver.get_mut().append_path_with_name(&file, name).await;
+            let logical_path = Path::new(&file);
+            let physical_path = self.source_path(logical_path);
+            let res = archiver
+                .get_mut()
+                .append_path_with_name(&physical_path, name)
+                .await;
             if let Err(error) = res {
-                log::warn!(target: &self.package.id, "{}", error);
+                failures += 1;
+                if failure_samples.len() < 3 {
+                    failure_samples.push(format!("{}: {}", logical_path.display(), error));
+                }
             }
         }
 
+        if failures > 0 {
+            log::warn!(
+                target: &self.package.id,
+                "skipped {failures} package path(s); samples: {}",
+                failure_samples.join(" | ")
+            );
+        }
+
         Ok(())
+    }
+
+    fn source_path(&self, logical_path: &Path) -> PathBuf {
+        let relative = logical_path
+            .strip_prefix(Path::new("/"))
+            .unwrap_or(logical_path);
+        let physical_path = self.preferences.source_root.join(relative);
+        if fs::symlink_metadata(&physical_path).is_ok() {
+            physical_path
+        } else if fs::symlink_metadata(logical_path).is_ok() {
+            logical_path.to_path_buf()
+        } else {
+            logical_path.to_path_buf()
+        }
     }
 
     /// Collects package metadata such as install scripts,
@@ -274,6 +326,24 @@ mod tests {
         Dpkg, Result,
     };
     use std::{fs, path::Path, process::Command, sync::Arc};
+
+    #[test]
+    fn package_source_root_supports_rootful_rootless_and_roothide_paths() {
+        assert_eq!(
+            super::package_source_root(Path::new("/var/lib/dpkg")),
+            Path::new("/")
+        );
+        assert_eq!(
+            super::package_source_root(Path::new("/var/jb/var/lib/dpkg")),
+            Path::new("/var/jb")
+        );
+        assert_eq!(
+            super::package_source_root(Path::new(
+                "/var/containers/Bundle/Application/.jbroot-ABC/var/lib/dpkg"
+            )),
+            Path::new("/var/containers/Bundle/Application/.jbroot-ABC")
+        );
+    }
 
     struct ProgressImpl;
 

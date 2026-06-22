@@ -37,6 +37,7 @@ use safer_ffi::{
     ptr::NonNullMut,
 };
 use std::{collections::LinkedList, os::unix::ffi::OsStringExt, sync::Arc};
+use tokio::sync::Semaphore;
 
 #[derive_ReprC]
 #[repr(C)]
@@ -123,12 +124,18 @@ pub(crate) fn rebuild_packages(dpkg: &TwDpkg, parameters: TwBuildParameters<'_>)
     let dpkg_contents = Arc::new(dpkg.inner_dpkg().info_dir_contents()?);
 
     let mut workers = LinkedList::new();
+    let parallelism = std::thread::available_parallelism()
+        .map_or(2, usize::from)
+        .clamp(2, 4);
+    let semaphore = Arc::new(Semaphore::new(parallelism));
     for package in parameters.packages.iter() {
         let package = package.clone();
         let dpkg_contents = dpkg_contents.clone();
         let preferences = preferences.clone();
+        let semaphore = semaphore.clone();
 
         workers.push_back(tokio_rt.spawn(async move {
+            let _permit = semaphore.acquire_owned().await;
             let worker = Worker::new(&*package, progress, None, preferences, dpkg_contents);
             let result = worker.run().await;
             (package, result)

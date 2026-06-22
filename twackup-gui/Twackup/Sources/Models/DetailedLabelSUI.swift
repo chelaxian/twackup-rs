@@ -18,6 +18,10 @@ struct DetailedLabelSUI: View {
             Spacer()
             Text(detailed)
                 .foregroundColor(.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+                .fixedSize(horizontal: true, vertical: false)
+                .layoutPriority(1)
         }
     }
 

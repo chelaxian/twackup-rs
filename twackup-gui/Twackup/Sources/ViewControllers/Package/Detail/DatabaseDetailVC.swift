@@ -7,7 +7,7 @@
 
 import UIKit
 
-class DatabaseDetailVC: PackageDetailVC<DebPackage> {
+class DatabaseDetailVC: PackageDetailVC<DebPackage>, DatabasePackageDetailedViewDelegate {
     private lazy var _container = DatabasePackageDetailedView(delegate: self)
     override var detailView: PackageDetailedView<DebPackage> { _container }
 
@@ -15,29 +15,10 @@ class DatabaseDetailVC: PackageDetailVC<DebPackage> {
         UIBarButtonItem(barButtonSystemItem: .action, target: self, action: #selector(shareDeb))
     }()
 
-    private lazy var deleteDebButton: UIBarButtonItem = {
-        UIBarButtonItem(title: "remove-btn".localized, style: .plain, target: self, action: #selector(deleteDeb))
-    }()
-
-    private lazy var installDebButton: UIBarButtonItem = {
-        UIBarButtonItem(title: "install-btn".localized, style: .plain, target: self, action: #selector(installDeb))
-    }()
-
     override var package: DebPackage? {
         didSet {
             navigationItem.rightBarButtonItem = package != nil ? shareDebButton : nil
-            configureToolbar()
         }
-    }
-
-    override func viewWillAppear(_ animated: Bool) {
-        super.viewWillAppear(animated)
-        configureToolbar()
-    }
-
-    override func viewWillDisappear(_ animated: Bool) {
-        super.viewWillDisappear(animated)
-        navigationController?.setToolbarHidden(true, animated: animated)
     }
 
     @objc
@@ -68,7 +49,6 @@ class DatabaseDetailVC: PackageDetailVC<DebPackage> {
         }
     }
 
-    @objc
     func installDeb() {
         guard let package else { return }
 
@@ -87,7 +67,6 @@ class DatabaseDetailVC: PackageDetailVC<DebPackage> {
         }
     }
 
-    @objc
     func deleteDeb() {
         guard let package else { return }
 
@@ -111,8 +90,6 @@ class DatabaseDetailVC: PackageDetailVC<DebPackage> {
     }
 
     private func returnToDebsList() {
-        navigationController?.setToolbarHidden(true, animated: true)
-
         if let navigationController, navigationController.viewControllers.count > 1 {
             navigationController.popViewController(animated: true)
             return
@@ -121,17 +98,6 @@ class DatabaseDetailVC: PackageDetailVC<DebPackage> {
         if let splitViewController {
             splitViewController.show(.primary)
         }
-    }
-
-    private func configureToolbar() {
-        guard package != nil else {
-            navigationController?.setToolbarHidden(true, animated: false)
-            return
-        }
-
-        let spacer = UIBarButtonItem(barButtonSystemItem: .flexibleSpace, target: nil, action: nil)
-        setToolbarItems([deleteDebButton, spacer, installDebButton], animated: false)
-        navigationController?.setToolbarHidden(false, animated: false)
     }
 
     private func showResult(title: String, message: String) {
