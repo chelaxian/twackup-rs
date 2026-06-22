@@ -41,6 +41,18 @@ final class LogViewController: UIViewController, FFILoggerSubscriber, Scrollable
         return UIBarButtonItem(title: title, style: .plain, target: self, action: #selector(actionClearLog))
     }()
 
+    private(set) lazy var exportLogButton: UIBarButtonItem = {
+        let button = UIBarButtonItem(
+            image: UIImage(systemName: "square.and.arrow.up"),
+            style: .plain,
+            target: self,
+            action: #selector(actionExportLog(_:))
+        )
+        button.accessibilityLabel = "log-export-btn".localized
+        button.isEnabled = false
+        return button
+    }()
+
     init(mainModel: MainModel, metadata: ViewControllerMetadata) {
         self.mainModel = mainModel
         self.metadata = metadata
@@ -71,7 +83,7 @@ final class LogViewController: UIViewController, FFILoggerSubscriber, Scrollable
         super.viewDidLoad()
 
         navigationItem.title = metadata.navTitle
-        navigationItem.rightBarButtonItem = clearLogButton
+        navigationItem.rightBarButtonItems = [clearLogButton, exportLogButton]
     }
 
     override func viewWillAppear(_ animated: Bool) {
@@ -157,9 +169,47 @@ final class LogViewController: UIViewController, FFILoggerSubscriber, Scrollable
         renderTask?.cancel()
         renderTask = nil
         currentText.setAttributedString(NSAttributedString())
+        exportLogButton.isEnabled = false
         renderLog()
 
         scrollView.contentOffset = scrollView.minimumContentOffset
+    }
+
+    @objc
+    func actionExportLog(_ button: UIBarButtonItem) {
+        guard currentText.length > 0 else { return }
+
+        let directory = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+            .appendingPathComponent("twackup-log-share-\(UUID().uuidString)", isDirectory: true)
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd-HHmmss"
+        let fileURL = directory
+            .appendingPathComponent("Twackup-Log-\(formatter.string(from: Date())).txt")
+        let text = currentText.string
+
+        do {
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            try text.write(to: fileURL, atomically: true, encoding: .utf8)
+        } catch {
+            try? FileManager.default.removeItem(at: directory)
+            let alert = UIAlertController(
+                title: "log-export-error-title".localized,
+                message: error.localizedDescription,
+                preferredStyle: .alert
+            )
+            alert.addAction(UIAlertAction(title: "OK", style: .default))
+            present(alert, animated: true)
+            return
+        }
+
+        let itemSource = LogExportItemSource(text: text, fileURL: fileURL)
+        let activityVC = UIActivityViewController(activityItems: [itemSource], applicationActivities: nil)
+        activityVC.popoverPresentationController?.barButtonItem = button
+        activityVC.completionWithItemsHandler = { _, _, _, _ in
+            try? FileManager.default.removeItem(at: directory)
+        }
+        present(activityVC, animated: true)
     }
 
     // MARK: - FFILoggerSubscriber
@@ -186,6 +236,7 @@ final class LogViewController: UIViewController, FFILoggerSubscriber, Scrollable
 
             currentText.append(NSAttributedString(string: "\n"))
             trimLogIfNeeded()
+            exportLogButton.isEnabled = true
 
             wantsToScrollBottom = true
             if isViewLoaded, view.window != nil {
@@ -202,5 +253,33 @@ final class LogViewController: UIViewController, FFILoggerSubscriber, Scrollable
     func scrollToInitialPosition(animated: Bool) {
         wantsToScrollBottom = true
         scrollToBottomIfNeeded(animated: animated)
+    }
+}
+
+private final class LogExportItemSource: NSObject, UIActivityItemSource {
+    private let text: String
+    private let fileURL: URL
+
+    init(text: String, fileURL: URL) {
+        self.text = text
+        self.fileURL = fileURL
+    }
+
+    func activityViewControllerPlaceholderItem(_ activityViewController: UIActivityViewController) -> Any {
+        fileURL
+    }
+
+    func activityViewController(
+        _ activityViewController: UIActivityViewController,
+        itemForActivityType activityType: UIActivity.ActivityType?
+    ) -> Any? {
+        activityType == .copyToPasteboard ? text : fileURL
+    }
+
+    func activityViewController(
+        _ activityViewController: UIActivityViewController,
+        subjectForActivityType activityType: UIActivity.ActivityType?
+    ) -> String {
+        fileURL.deletingPathExtension().lastPathComponent
     }
 }
