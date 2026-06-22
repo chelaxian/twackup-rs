@@ -225,7 +225,12 @@ impl<'a, T: Progress> Worker<'a, T> {
             if let Err(error) = res {
                 failures += 1;
                 if failure_samples.len() < 3 {
-                    failure_samples.push(format!("{}: {}", logical_path.display(), error));
+                    failure_samples.push(format!(
+                        "{} (source {}): {}",
+                        logical_path.display(),
+                        physical_path.display(),
+                        error
+                    ));
                 }
             }
         }

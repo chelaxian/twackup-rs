@@ -214,9 +214,12 @@ impl Build {
 
         let mut failures = 0usize;
         for (package_id, result) in results {
-            if let Err(error) = result {
-                failures += 1;
-                log::error!(target: &package_id, "{error}");
+            match result {
+                Ok(path) => log::info!(target: &package_id, "built {}", path.display()),
+                Err(error) => {
+                    failures += 1;
+                    log::error!(target: &package_id, "{error}");
+                }
             }
         }
 
