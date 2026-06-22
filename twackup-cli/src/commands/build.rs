@@ -18,10 +18,15 @@
  */
 
 use super::{CliCommand, GlobalOptions};
-use crate::{error::Result, paths, progress_bar::ProgressBar};
+use crate::{
+    error::{CLIError, Result},
+    paths,
+    progress_bar::ProgressBar,
+};
 use chrono::Local;
 use console::style;
 use gethostname::gethostname;
+use futures::{stream, StreamExt};
 use libproc::libproc::proc_pid::am_root;
 use std::{collections::LinkedList, fs, io, iter::Iterator, path::PathBuf, sync::Arc};
 use tokio::sync::Mutex;
@@ -189,21 +194,38 @@ impl Build {
         let contents = Dpkg::new(&self.global_options.admin_dir, false).info_dir_contents()?;
         let contents = Arc::new(contents);
 
-        futures::future::join_all(packages.into_iter().map(|package| {
+        let parallelism = std::thread::available_parallelism()
+            .map_or(2, usize::from)
+            .clamp(2, 4);
+        let results = stream::iter(packages.into_iter().map(|package| {
             let progress = progress.clone();
             let archive = archive.clone();
             let preferences = preferences.clone();
             let contents = contents.clone();
 
-            tokio::spawn(async move {
+            async move {
                 let builder = Worker::new(&package, progress, archive, preferences, contents);
-                builder.run().await
-            })
+                (package.id.clone(), builder.run().await)
+            }
         }))
+        .buffer_unordered(parallelism)
+        .collect::<Vec<_>>()
         .await;
+
+        let mut failures = 0usize;
+        for (package_id, result) in results {
+            if let Err(error) = result {
+                failures += 1;
+                log::error!(target: &package_id, "{error}");
+            }
+        }
 
         progress.finished_all();
         log::info!("Processed {} packages", all_count);
+
+        if failures > 0 {
+            return Err(CLIError::BuildFailures(failures));
+        }
 
         Ok(())
     }

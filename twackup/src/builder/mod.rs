@@ -247,7 +247,11 @@ impl<'a, T: Progress> Worker<'a, T> {
             .unwrap_or(logical_path);
         let physical_path = self.preferences.source_root.join(relative);
         if fs::symlink_metadata(&physical_path).is_ok() {
-            physical_path
+            if self.preferences.follow_symlinks {
+                fs::canonicalize(&physical_path).unwrap_or(physical_path)
+            } else {
+                physical_path
+            }
         } else if fs::symlink_metadata(logical_path).is_ok() {
             logical_path.to_path_buf()
         } else {
@@ -301,7 +305,7 @@ impl<'a, T: Progress> Worker<'a, T> {
     /// Returns error if any of underlying operations failed
     async fn add_to_archive(&self, file: &PathBuf) -> Result<()> {
         if let Some(ref archive) = self.archive {
-            let mut archive = archive.try_lock().map_err(|_| Generic::Lock)?;
+            let mut archive = archive.lock().await;
 
             let file_name = file.file_name().ok_or(Generic::PathMustHaveFileEnding)?;
             let abs_file = Path::new(".").join(file_name);

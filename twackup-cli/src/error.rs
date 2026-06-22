@@ -32,4 +32,7 @@ pub(crate) enum CLIError {
 
     #[error("Plist: {0}")]
     Plist(#[from] plist::Error),
+
+    #[error("Failed to rebuild {0} package(s)")]
+    BuildFailures(usize),
 }
