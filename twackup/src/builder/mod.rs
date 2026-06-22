@@ -246,9 +246,9 @@ impl<'a, T: Progress> Worker<'a, T> {
             .strip_prefix(Path::new("/"))
             .unwrap_or(logical_path);
         let physical_path = self.preferences.source_root.join(relative);
-        if fs::symlink_metadata(&physical_path).is_ok() {
-            if self.preferences.follow_symlinks {
-                fs::canonicalize(&physical_path).unwrap_or(physical_path)
+        if let Ok(metadata) = fs::symlink_metadata(&physical_path) {
+            if self.preferences.follow_symlinks && metadata.file_type().is_symlink() {
+                self.resolve_physical_symlink(physical_path)
             } else {
                 physical_path
             }
@@ -257,6 +257,30 @@ impl<'a, T: Progress> Worker<'a, T> {
         } else {
             logical_path.to_path_buf()
         }
+    }
+
+    fn resolve_physical_symlink(&self, mut path: PathBuf) -> PathBuf {
+        for _ in 0..16 {
+            let Ok(metadata) = fs::symlink_metadata(&path) else {
+                break;
+            };
+            if !metadata.file_type().is_symlink() {
+                break;
+            }
+            let Ok(target) = fs::read_link(&path) else {
+                break;
+            };
+            path = if target.is_absolute() {
+                self.preferences.source_root.join(
+                    target
+                        .strip_prefix(Path::new("/"))
+                        .unwrap_or(target.as_path()),
+                )
+            } else {
+                path.parent().unwrap_or(Path::new("/")).join(target)
+            };
+        }
+        path
     }
 
     /// Collects package metadata such as install scripts,
