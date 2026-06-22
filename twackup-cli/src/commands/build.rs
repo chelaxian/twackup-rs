@@ -173,8 +173,7 @@ impl Build {
     }
 
     async fn build(&self, packages: Vec<Package>) -> Result<()> {
-        let destination_dir = paths::shared_output_path(&self.destination_dir);
-        self.create_dir_if_needed(&destination_dir)?;
+        self.create_dir_if_needed()?;
 
         let all_count = packages.len() as u64;
         let progress = ProgressBar::default(all_count);
@@ -183,10 +182,10 @@ impl Build {
             log::warn!("{}", GenericError::NotRunningAsRoot);
         }
 
-        let archive = self.create_archive_if_needed(&destination_dir).await?;
+        let archive = self.create_archive_if_needed().await?;
 
         let mut preferences =
-            Preferences::new(&self.global_options.admin_dir, &destination_dir);
+            Preferences::new(&self.global_options.admin_dir, &self.destination_dir);
         preferences.remove_deb = self.remove_after;
         preferences.follow_symlinks = self.follow_symlinks;
         preferences.compression.level = CompressionLevel::Custom(self.compression_level);
@@ -234,10 +233,7 @@ impl Build {
         Ok(())
     }
 
-    async fn create_archive_if_needed(
-        &self,
-        destination_dir: &std::path::Path,
-    ) -> Result<Option<AllPackagesArchive>> {
+    async fn create_archive_if_needed(&self) -> Result<Option<AllPackagesArchive>> {
         if !self.archive {
             return Ok(None);
         }
@@ -251,20 +247,20 @@ impl Build {
             _ => self.archive_name.clone(),
         };
 
-        let filepath = destination_dir.join(&filename);
+        let filepath = self.destination_dir.join(&filename);
         let file = tokio::fs::File::create(filepath).await?;
 
         let archive = tokio_tar::Builder::new(file);
         Ok(Some(Arc::new(Mutex::new(archive))))
     }
 
-    fn create_dir_if_needed(&self, destination_dir: &std::path::Path) -> Result<()> {
-        match fs::metadata(destination_dir) {
-            Ok(metadata) if !metadata.is_dir() => fs::remove_file(destination_dir)?,
+    fn create_dir_if_needed(&self) -> Result<()> {
+        match fs::metadata(&self.destination_dir) {
+            Ok(metadata) if !metadata.is_dir() => fs::remove_file(&self.destination_dir)?,
             _ => {}
         }
 
-        Ok(fs::create_dir_all(destination_dir)?)
+        Ok(fs::create_dir_all(&self.destination_dir)?)
     }
 }
 

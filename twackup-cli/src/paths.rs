@@ -74,23 +74,6 @@ pub(crate) fn debs_target_dir() -> OsString {
     "/var/mobile/Documents/twackup".into()
 }
 
-#[cfg(target_os = "ios")]
-pub(crate) fn shared_output_path(path: &Path) -> PathBuf {
-    let mobile_root = Path::new("/var/mobile");
-    let rootfs_mobile = Path::new("/rootfs/private/var/mobile");
-    if rootfs_mobile.is_dir() {
-        if let Ok(relative) = path.strip_prefix(mobile_root) {
-            return rootfs_mobile.join(relative);
-        }
-    }
-    path.to_path_buf()
-}
-
-#[cfg(not(target_os = "ios"))]
-pub(crate) fn shared_output_path(path: &Path) -> PathBuf {
-    path.to_path_buf()
-}
-
 #[cfg(not(target_os = "ios"))]
 pub(crate) fn debs_target_dir() -> OsString {
     match std::env::current_dir() {
